@@ -555,6 +555,14 @@
                             } else if (config.net === 'grpc') {
                                 proxy.network = 'grpc';
                                 if (config.path) proxy['grpc-opts'] = { 'grpc-service-name': config.path };
+                            } else if (config.net === 'h2') {
+                                proxy.network = 'h2';
+                                proxy['h2-opts'] = {};
+                                if (config.path) proxy['h2-opts'].path = config.path;
+                                if (config.host) proxy['h2-opts'].host = config.host.split(',');
+                            } else if (config.net === 'kcp') {
+                                proxy.network = 'kcp';
+                                proxy['kcp-opts'] = { header: { type: config.type || 'none' } };
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://') || line.startsWith('hysteria://') || line.startsWith('socks5://') || line.startsWith('http://') || line.startsWith('https://')) {
@@ -580,37 +588,56 @@
                                         proxy.name = `${proxy.name} (Clash不支持流控: ${flow})`;
                                     }
                                 }
+                            } else if (type === 'trojan') {
+                                proxy.password = url.username;
                             } else if (type === 'hysteria2') {
                                 proxy.password = url.username;
                                 const obfs = url.searchParams.get('obfs');
                                 if (obfs) {
                                     proxy.obfs = obfs;
-                                    const op = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass');
+                                    const op = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass') || url.searchParams.get('obfs_password');
                                     if (op) proxy['obfs-password'] = op;
                                 }
-                                const mport = url.searchParams.get('mport');
-                                if (mport) proxy.port = mport;
+                                const up = url.searchParams.get('up') || url.searchParams.get('upload'); if (up) proxy.up = up;
+                                const down = url.searchParams.get('down') || url.searchParams.get('download'); if (down) proxy.down = down;
+                                const mport = url.searchParams.get('mport') || url.searchParams.get('ports');
+                                if (mport) {
+                                    if (mport.includes('-') || mport.includes(',')) {
+                                        proxy.ports = mport;
+                                        delete proxy.port;
+                                    } else {
+                                        proxy.port = parseInt(mport);
+                                    }
+                                }
+                                const hi = url.searchParams.get('hop-interval') || url.searchParams.get('hop_interval');
+                                if (hi) proxy['hop-interval'] = parseInt(hi);
                             } else if (type === 'tuic') {
                                 if (url.username) proxy.uuid = url.username;
                                 if (url.password) proxy.password = url.password;
-                                const cc = url.searchParams.get('congestion_control');
-                                if (cc) proxy['congestion-control'] = cc;
-                                const urm = url.searchParams.get('udp_relay_mode');
+                                const token = url.searchParams.get('token');
+                                if (token) proxy.token = token;
+                                const cc = url.searchParams.get('congestion_control') || url.searchParams.get('congestion-controller');
+                                if (cc) proxy['congestion-controller'] = cc;
+                                const urm = url.searchParams.get('udp_relay_mode') || url.searchParams.get('udp-relay-mode');
                                 if (urm) proxy['udp-relay-mode'] = urm;
-                                const hbi = url.searchParams.get('heartbeat_interval');
+                                const hbi = url.searchParams.get('heartbeat_interval') || url.searchParams.get('heartbeat-interval');
                                 if (hbi) proxy['heartbeat-interval'] = parseInt(hbi);
-                                const rrtt = url.searchParams.get('reduce_rtt');
+                                const rrtt = url.searchParams.get('reduce_rtt') || url.searchParams.get('reduce-rtt');
                                 if (rrtt === '1' || rrtt === 'true') proxy['reduce-rtt'] = true;
-                                const rto = url.searchParams.get('request_timeout');
+                                const rto = url.searchParams.get('request_timeout') || url.searchParams.get('request-timeout');
                                 if (rto) proxy['request-timeout'] = parseInt(rto);
-                                const fo = url.searchParams.get('fast_open');
+                                const fo = url.searchParams.get('fast_open') || url.searchParams.get('fast-open');
                                 if (fo === '1' || fo === 'true') proxy['fast-open'] = true;
-                                const dsni = url.searchParams.get('disable_sni');
+                                const dsni = url.searchParams.get('disable_sni') || url.searchParams.get('disable-sni');
                                 if (dsni === '1' || dsni === 'true') proxy['disable-sni'] = true;
                                 const ip = url.searchParams.get('ip');
                                 if (ip) proxy.ip = ip;
                                 const alpn = url.searchParams.get('alpn');
                                 if (alpn) proxy.alpn = alpn.split(',');
+                                const mudps = url.searchParams.get('max_udp_relay_packet_size') || url.searchParams.get('max-udp-relay-packet-size');
+                                if (mudps) proxy['max-udp-relay-packet-size'] = parseInt(mudps);
+                                const mos = url.searchParams.get('max_open_streams') || url.searchParams.get('max-open-streams');
+                                if (mos) proxy['max-open-streams'] = parseInt(mos);
                             } else if (type === 'hysteria') {
                                 if (url.username) proxy.auth_str = url.username;
                                 const up = url.searchParams.get('up'); if (up) proxy.up = up;
@@ -621,6 +648,9 @@
                                     proxy.port = mport;
                                     proxy.protocol = 'mports';
                                 }
+                                const fastOpen = url.searchParams.get('fast_open') || url.searchParams.get('fast-open');
+                                if (fastOpen === '1' || fastOpen === 'true') proxy['fast-open'] = true;
+                                const hop = url.searchParams.get('hop'); if (hop) proxy.hop = hop;
                             } else if (type === 'http' || type === 'socks5') {
                                 if (url.username) proxy.username = url.username;
                                 if (url.password) proxy.password = url.password;
@@ -631,7 +661,7 @@
 
                             const security = url.searchParams.get('security');
                             const sni = url.searchParams.get('sni') || url.searchParams.get('peer');
-                            if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
+                            if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria', 'socks5'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
                                 proxy.tls = true;
                                 if (security === 'reality') {
                                     proxy['reality-opts'] = {};
@@ -640,7 +670,7 @@
                                     if (Object.keys(proxy['reality-opts']).length === 0) delete proxy['reality-opts'];
                                 }
                                 if (sni) proxy.servername = sni;
-                                const fp = url.searchParams.get('fp');
+                                const fp = url.searchParams.get('fp') || url.searchParams.get('fingerprint');
                                 if (fp) proxy['client-fingerprint'] = fp;
                                 const alpn = url.searchParams.get('alpn');
                                 if (alpn && !proxy.alpn) proxy.alpn = alpn.split(',');
@@ -657,6 +687,11 @@
                             } else if (network === 'grpc') {
                                 proxy.network = 'grpc';
                                 const sn = url.searchParams.get('serviceName'); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
+                            } else if (network === 'h2') {
+                                proxy.network = 'h2';
+                                proxy['h2-opts'] = {};
+                                const path = url.searchParams.get('path'); if (path) proxy['h2-opts'].path = path;
+                                const host = url.searchParams.get('host'); if (host) proxy['h2-opts'].host = host.split(',');
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('ss://')) {
@@ -664,7 +699,6 @@
                             if (main.includes('#')) { const parts = main.split('#'); hash = decodeURIComponent(parts[1]); main = parts[0]; }
                             let method = '', password = '', server = '', port = '';
 
-                            // Handling SIP002 format: ss://BASE64(method:password)@server:port
                             if (main.includes('@')) {
                                 const parts = main.split('@');
                                 const credentials = decodeBase64Safe(parts[0]);
@@ -679,7 +713,6 @@
                                 }
                             } else {
                                 const decoded = decodeBase64Safe(main);
-                                // Handles legacy format or others
                                 const parts = decoded.split('@');
                                 if (parts.length === 2) {
                                     const cParts = parts[0].split(':');
@@ -690,9 +723,9 @@
                             }
                             if (server && port) {
                                 proxy = { name: hash || `ss-${server}`, type: 'ss', server: server, port: port, cipher: method, password: password };
-                                const plugin = new URLSearchParams(line.split('?')[1] || '').get('plugin');
+                                const urlObj = new URL(line);
+                                const plugin = urlObj.searchParams.get('plugin');
                                 if (plugin) {
-                                    // 粗略解析 SS 插件，Meta 支持常用插件
                                     const pParts = decodeURIComponent(plugin).split(';');
                                     proxy.plugin = pParts[0];
                                     if (pParts.length > 1) {
@@ -724,6 +757,7 @@
                                     protocol: protocol, 'protocol-param': decodeURIComponent(params.get('protoparam') || ''),
                                     obfs: obfs, 'obfs-param': decodeURIComponent(params.get('obfsparam') || '')
                                 };
+                                proxies.push(proxy);
                             }
                         } else if (line.startsWith('wireguard://')) {
                             const url = new URL(line);
@@ -738,6 +772,7 @@
                             const reserved = url.searchParams.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
                             const psk = url.searchParams.get('presharedKey'); if (psk) proxy['preshared-key'] = psk;
                             const mtu = url.searchParams.get('mtu'); if (mtu) proxy.mtu = parseInt(mtu);
+                            const udp = url.searchParams.get('udp'); if (udp === '1' || udp === 'true') proxy.udp = true;
                             proxies.push(proxy);
                         }
                     } catch (e) {
