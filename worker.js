@@ -576,6 +576,7 @@ const html_content = `<!DOCTYPE html>
                     }
                 }
                 if (proxies.length > 0) {
+                    const proxyNames = proxies.map(p => p.name);
                     return jsyaml.dump({
                         'port': 7890,
                         'socks-port': 7891,
@@ -583,7 +584,33 @@ const html_content = `<!DOCTYPE html>
                         'allow-lan': true,
                         'mode': 'rule',
                         'log-level': 'info',
-                        'proxies': proxies
+                        'proxies': proxies,
+                        'proxy-groups': [
+                            {
+                                name: '🚀 节点选择',
+                                type: 'select',
+                                proxies: ['🛰️ 自动选择', 'DIRECT', ...proxyNames]
+                            },
+                            {
+                                name: '🛰️ 自动选择',
+                                type: 'url-test',
+                                url: 'http://www.gstatic.com/generate_204',
+                                interval: 300,
+                                tolerance: 50,
+                                proxies: proxyNames
+                            }
+                        ],
+                        'rules': [
+                            'DOMAIN-SUFFIX,google.com,🚀 节点选择',
+                            'DOMAIN-KEYWORD,google,🚀 节点选择',
+                            'DOMAIN-SUFFIX,github.com,🚀 节点选择',
+                            'DOMAIN-SUFFIX,youtube.com,🚀 节点选择',
+                            'DOMAIN-SUFFIX,facebook.com,🚀 节点选择',
+                            'DOMAIN-SUFFIX,twitter.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.google.com,🚀 节点选择',
+                            'GEOIP,CN,DIRECT',
+                            'MATCH,🚀 节点选择'
+                        ]
                     }, { lineWidth: -1 });
                 }
                 return null;
