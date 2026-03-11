@@ -522,7 +522,7 @@ const html_content = `<!DOCTYPE html>
                         if (line.startsWith('vmess://')) {
                             const config = JSON.parse(decodeBase64Safe(line.slice(8)));
                             proxy = {
-                                name: config.ps || 'vmess-' + Math.random().toString(36).substr(2, 5),
+                                name: config.ps || \`vmess-\${config.add || 'node'}\`,
                                 type: 'vmess', server: config.add, port: config.port ? parseInt(config.port) : undefined,
                                 uuid: config.id
                             };
@@ -538,19 +538,23 @@ const html_content = `<!DOCTYPE html>
                             }
                             if (config.net === 'ws') {
                                 proxy.network = 'ws';
-                                proxy['ws-opts'] = { path: config.path || '/', headers: { Host: config.host || '' } };
+                                proxy['ws-opts'] = {};
+                                if (config.path) proxy['ws-opts'].path = config.path;
+                                if (config.host) proxy['ws-opts'].headers = { Host: config.host };
+                                if (Object.keys(proxy['ws-opts']).length === 0) delete proxy['ws-opts'];
                             } else if (config.net === 'grpc') {
                                 proxy.network = 'grpc';
-                                proxy['grpc-opts'] = { 'grpc-service-name': config.path || '' };
+                                if (config.path) proxy['grpc-opts'] = { 'grpc-service-name': config.path };
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://') || line.startsWith('hysteria://') || line.startsWith('socks5://') || line.startsWith('http://') || line.startsWith('https://')) {
                             const url = new URL(line);
                             let type = url.protocol.replace(':', '');
                             if (type === 'hy2') type = 'hysteria2';
+                            if (type === 'https') type = 'http';
 
                             proxy = {
-                                name: decodeURIComponent(url.hash.slice(1)) || \`\${type}-\${Math.random().toString(36).substr(2, 5)}\`,
+                                name: decodeURIComponent(url.hash.slice(1)) || \`\${type}-\${url.hostname || 'node'}\`,
                                 type: type, server: url.hostname, port: url.port ? parseInt(url.port) : undefined
                             };
                             if (proxy.port === undefined) delete proxy.port;
@@ -564,19 +568,20 @@ const html_content = `<!DOCTYPE html>
                                 const obfs = url.searchParams.get('obfs');
                                 if (obfs) {
                                     proxy.obfs = obfs;
-                                    proxy['obfs-password'] = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass') || '';
+                                    const op = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass');
+                                    if (op) proxy['obfs-password'] = op;
                                 }
                                 const mport = url.searchParams.get('mport');
                                 if (mport) proxy.port = mport;
                             } else if (type === 'tuic') {
-                                proxy.uuid = url.username;
-                                proxy.password = url.password;
+                                if (url.username) proxy.uuid = url.username;
+                                if (url.password) proxy.password = url.password;
                                 const cc = url.searchParams.get('congestion_control');
                                 if (cc) proxy['congestion-control'] = cc;
                                 const urm = url.searchParams.get('udp_relay_mode');
                                 if (urm) proxy['udp-relay-mode'] = urm;
                             } else if (type === 'hysteria') {
-                                proxy.auth_str = url.username;
+                                if (url.username) proxy.auth_str = url.username;
                                 const up = url.searchParams.get('up'); if (up) proxy.up = up;
                                 const down = url.searchParams.get('down'); if (down) proxy.down = down;
                                 const alpn = url.searchParams.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
@@ -586,11 +591,11 @@ const html_content = `<!DOCTYPE html>
                                     proxy.protocol = 'mports';
                                 }
                             } else if (type === 'http' || type === 'socks5') {
-                                proxy.username = url.username;
-                                proxy.password = url.password;
+                                if (url.username) proxy.username = url.username;
+                                if (url.password) proxy.password = url.password;
                                 if (type === 'http' && url.protocol === 'https:') proxy.tls = true;
                             } else {
-                                proxy.password = decodeURIComponent(url.username);
+                                if (url.username) proxy.password = decodeURIComponent(url.username);
                             }
 
                             const security = url.searchParams.get('security');
@@ -598,10 +603,10 @@ const html_content = `<!DOCTYPE html>
                             if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
                                 proxy.tls = true;
                                 if (security === 'reality') {
-                                    proxy['reality-opts'] = {
-                                        'public-key': url.searchParams.get('pbk') || '',
-                                        'short-id': url.searchParams.get('sid') || ''
-                                    };
+                                    proxy['reality-opts'] = {};
+                                    const pbk = url.searchParams.get('pbk'); if (pbk) proxy['reality-opts']['public-key'] = pbk;
+                                    const sid = url.searchParams.get('sid'); if (sid) proxy['reality-opts']['short-id'] = sid;
+                                    if (Object.keys(proxy['reality-opts']).length === 0) delete proxy['reality-opts'];
                                 }
                                 if (sni) proxy.servername = sni;
                                 const fp = url.searchParams.get('fp');
@@ -614,10 +619,13 @@ const html_content = `<!DOCTYPE html>
                             const network = url.searchParams.get('type');
                             if (network === 'ws') {
                                 proxy.network = 'ws';
-                                proxy['ws-opts'] = { path: url.searchParams.get('path') || '/', headers: { Host: url.searchParams.get('host') || '' } };
+                                proxy['ws-opts'] = {};
+                                const path = url.searchParams.get('path'); if (path) proxy['ws-opts'].path = path;
+                                const host = url.searchParams.get('host'); if (host) proxy['ws-opts'].headers = { Host: host };
+                                if (Object.keys(proxy['ws-opts']).length === 0) delete proxy['ws-opts'];
                             } else if (network === 'grpc') {
                                 proxy.network = 'grpc';
-                                proxy['grpc-opts'] = { 'grpc-service-name': url.searchParams.get('serviceName') || '' };
+                                const sn = url.searchParams.get('serviceName'); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('ss://')) {
@@ -737,22 +745,8 @@ const html_content = `<!DOCTYPE html>
 
                         if (doc && doc.proxies && Array.isArray(doc.proxies)) {
                             const proxies = doc.proxies;
-
-                            // 检查是否为“完整”配置：是否有常见的顶层配置字段
-                            const completeFields = ['port', 'socks-port', 'mixed-port', 'allow-lan', 'mode', 'log-level', 'rules', 'dns', 'proxy-groups'];
-                            const isComplete = completeFields.some(field => Object.prototype.hasOwnProperty.call(doc, field));
-
-                            if (!isComplete) {
-                                // 非完整配置：合并默认值进行自动补全
-                                doc = Object.assign({
-                                    'port': 7890,
-                                    'socks-port': 7891,
-                                    'mixed-port': 7892,
-                                    'allow-lan': true,
-                                    'mode': 'rule',
-                                    'log-level': 'info'
-                                }, doc);
-                            }
+                            // 极简主义：剥离所有无关配置
+                            doc = { proxies: proxies };
 
                             // 构造新的监听器列表（每个节点分配一个 Socks5 端口）
                             const listeners = [];
