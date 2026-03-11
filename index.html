@@ -404,7 +404,7 @@
                     v2rayPlaceholder: '如您只有 V2RayN 配置链接或Base64：请粘贴在这里！(支持所有主流协议，不支持变种协议，不支持机场订阅链接)，系统将为您自动解析并填充至下框...',
                     clashHeader: '2. Clash 配置源 (默认可直接从这步开始)',
                     copySourceConfig: '复制原配置',
-                    clashPlaceholder: '在此处粘贴完整的 Clash 配置文件源文本\n必须要包含 `proxies:` 节点数组部分...',
+                    clashPlaceholder: '在此处粘贴完整的 Clash 配置文件或节点列表数组\n如果是完整配置，系统将保留原有的规则、分组等信息并注入 Socks5 监听器；\n如果仅粘贴节点列表，系统将为您自动补全基础配置...',
                     startPortLabel: 'Socks5 起始分配端口',
                     clearAllBtn: '一键清空所有配置',
                     outputHeader: '生成结果',
@@ -431,7 +431,7 @@
                     v2rayPlaceholder: 'Paste your raw V2Ray link or Base64 here (Supports vmess/vless/ss/trojan. Does NOT support variants or subscription URLs). It will auto-fill the Clash config box below...',
                     clashHeader: '2. Clash YAML Config (Default Entry)',
                     copySourceConfig: 'Copy Raw Config',
-                    clashPlaceholder: 'Paste your full Clash YAML configuration here.\nIt MUST contain the `proxies:` proxy pool array...',
+                    clashPlaceholder: 'Paste your full Clash YAML configuration or a list of proxies.\nIf it is a full config, it will preserve rules/groups and inject Socks5 listeners.\nIf it is just a list, it will auto-complete basic settings...',
                     startPortLabel: 'Socks5 Start Port',
                     clearAllBtn: 'Clear All',
                     outputHeader: 'Conversion Result',
@@ -588,24 +588,38 @@
 
                 if (inputStr) {
                     try {
-                        const doc = jsyaml.load(inputStr);
+                        let doc = jsyaml.load(inputStr);
+
+                        // 如果输入是数组，则认为它只是节点列表，包装成对象
+                        if (Array.isArray(doc)) {
+                            doc = { proxies: doc };
+                        }
+
                         if (doc && doc.proxies && Array.isArray(doc.proxies)) {
                             const proxies = doc.proxies;
-                            const newDoc = {
-                                'port': 7890,
-                                'socks-port': 7891,
-                                'mixed-port': 7892,
-                                'allow-lan': true,
-                                'mode': 'rule',
-                                'log-level': 'info',
-                                'proxies': proxies,
-                                'listeners': []
-                            };
 
+                            // 检查是否为“完整”配置：是否有常见的顶层配置字段
+                            const completeFields = ['port', 'socks-port', 'mixed-port', 'allow-lan', 'mode', 'log-level', 'rules', 'dns', 'proxy-groups'];
+                            const isComplete = completeFields.some(field => Object.prototype.hasOwnProperty.call(doc, field));
+
+                            if (!isComplete) {
+                                // 非完整配置：合并默认值进行自动补全
+                                doc = Object.assign({
+                                    'port': 7890,
+                                    'socks-port': 7891,
+                                    'mixed-port': 7892,
+                                    'allow-lan': true,
+                                    'mode': 'rule',
+                                    'log-level': 'info'
+                                }, doc);
+                            }
+
+                            // 构造新的监听器列表（每个节点分配一个 Socks5 端口）
+                            const listeners = [];
                             let currentPort = startPort;
                             proxies.forEach((proxy) => {
                                 const safeName = `socks5-${currentPort}`;
-                                newDoc.listeners.push({
+                                listeners.push({
                                     name: safeName,
                                     type: 'socks',
                                     port: currentPort,
@@ -614,7 +628,10 @@
                                 currentPort++;
                             });
 
-                            outputStr = jsyaml.dump(newDoc, {
+                            // 更新或注入监听器，保持其他信息（如 dns, rules 等）不变
+                            doc.listeners = listeners;
+
+                            outputStr = jsyaml.dump(doc, {
                                 lineWidth: -1,
                                 noRefs: true
                             });
