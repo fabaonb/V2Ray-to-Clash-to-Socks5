@@ -542,7 +542,7 @@ const html_content = `<!DOCTYPE html>
                                 proxy['grpc-opts'] = { 'grpc-service-name': config.path || '' };
                             }
                             proxies.push(proxy);
-                        } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://')) {
+                        } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://') || line.startsWith('hysteria://') || line.startsWith('socks5://') || line.startsWith('http://') || line.startsWith('https://')) {
                             const url = new URL(line);
                             let type = url.protocol.replace(':', '');
                             if (type === 'hy2') type = 'hysteria2';
@@ -571,12 +571,23 @@ const html_content = `<!DOCTYPE html>
                                 if (cc) proxy['congestion-control'] = cc;
                                 const urm = url.searchParams.get('udp_relay_mode');
                                 if (urm) proxy['udp-relay-mode'] = urm;
+                            } else if (type === 'hysteria') {
+                                proxy.auth_str = url.username;
+                                proxy.up = url.searchParams.get('up') || '10';
+                                proxy.down = url.searchParams.get('down') || '50';
+                                proxy.alpn = (url.searchParams.get('alpn') || 'h3').split(',');
+                                proxy.protocol = url.searchParams.get('mport') ? 'mports' : 'udp';
+                            } else if (type === 'http' || type === 'socks5') {
+                                proxy.username = url.username;
+                                proxy.password = url.password;
+                                if (type === 'http' && url.protocol === 'https:') proxy.tls = true;
                             } else {
                                 proxy.password = decodeURIComponent(url.username);
                             }
 
                             const security = url.searchParams.get('security');
-                            if (security === 'tls' || security === 'reality' || type === 'hysteria2' || type === 'trojan' || type === 'tuic') {
+                            const sni = url.searchParams.get('sni') || url.searchParams.get('peer');
+                            if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
                                 proxy.tls = true;
                                 if (security === 'reality') {
                                     proxy['reality-opts'] = {
@@ -589,7 +600,7 @@ const html_content = `<!DOCTYPE html>
                                 const fp = url.searchParams.get('fp');
                                 if (fp) proxy['client-fingerprint'] = fp;
                                 const alpn = url.searchParams.get('alpn');
-                                if (alpn) proxy.alpn = alpn.split(',');
+                                if (alpn && !proxy.alpn) proxy.alpn = alpn.split(',');
                                 if (url.searchParams.get('insecure') === '1' || url.searchParams.get('allowInsecure') === '1') proxy['skip-cert-verify'] = true;
                             }
 
@@ -634,6 +645,38 @@ const html_content = `<!DOCTYPE html>
                             if (server && port) {
                                 proxies.push({ name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password, udp: true });
                             }
+                        } else if (line.startsWith('ssr://')) {
+                            const payload = decodeBase64Safe(line.slice(6));
+                            const parts = payload.split(':');
+                            if (parts.length >= 6) {
+                                const server = parts[0];
+                                const port = parseInt(parts[1]);
+                                const protocol = parts[2];
+                                const method = parts[3];
+                                const obfs = parts[4];
+                                const suffix = parts[5].split('/?');
+                                const password = decodeBase64Safe(suffix[0]);
+                                const params = new URLSearchParams(suffix[1] || '');
+                                proxy = {
+                                    name: decodeURIComponent(params.get('remarks') || '') || 'ssr-' + Math.random().toString(36).substr(2, 5),
+                                    type: 'ssr', server: server, port: port,
+                                    password: password, cipher: method,
+                                    protocol: protocol, 'protocol-param': decodeURIComponent(params.get('protoparam') || ''),
+                                    obfs: obfs, 'obfs-param': decodeURIComponent(params.get('obfsparam') || ''),
+                                    udp: true
+                                };
+                            }
+                        } else if (line.startsWith('wireguard://')) {
+                            const url = new URL(line);
+                            proxy = {
+                                name: decodeURIComponent(url.hash.slice(1)) || 'wg-' + Math.random().toString(36).substr(2, 5),
+                                type: 'wireguard', server: url.hostname, port: parseInt(url.port) || 51820,
+                                ip: url.searchParams.get('address') || '10.0.0.2',
+                                'private-key': url.searchParams.get('privateKey') || '',
+                                'public-key': url.searchParams.get('publicKey') || '',
+                                mtu: parseInt(url.searchParams.get('mtu') || '1420'),
+                                udp: true
+                            };
                         }
                     } catch (e) {
                         console.warn("解析节点失败:", line, e);
@@ -672,9 +715,14 @@ const html_content = `<!DOCTYPE html>
                             'DOMAIN-WILDCARD,*.gstatic.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.googleusercontent.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.ggpht.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.g.co,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.githubusercontent.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.git-scm.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.githubapi.com,🚀 节点选择',
                             'DOMAIN-SUFFIX,google.com,🚀 节点选择',
                             'DOMAIN-SUFFIX,github.com,🚀 节点选择',
                             'DOMAIN-KEYWORD,google,🚀 节点选择',
+                            'DOMAIN-KEYWORD,github,🚀 节点选择',
                             'GEOIP,CN,DIRECT',
                             'MATCH,🚀 节点选择'
                         ]
