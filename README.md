@@ -50,7 +50,7 @@
 
 ### 核心功能
 
-- **全协议支持**：支持 VMess, VLESS, Trojan, Shadowsocks 链接解析。
+- **全协议支持**：支持 VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard 及 HTTP/Socks5 链接解析。
 - **配置保留/补全**：
   - 输入完整 Clash 配置时，保留原有的代理组、路由规则及 DNS 设置，仅注入 Socks5 接口。
   - 输入纯节点列表时，自动补全基础配置。
@@ -172,7 +172,7 @@ No server-side dependency — completely eliminates the risk of privacy leaks.
 
 ### Key Features
 
-- **Full Protocol Support**: Supports parsing for VMess, VLESS, Trojan, and Shadowsocks links.
+- **Full Protocol Support**: Supports parsing for VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, and HTTP/Socks5 links.
 - **Config Preservation & Completion**:
   - Preserves original proxy groups, routing rules, and DNS settings when a full Clash config is provided.
   - Automatically completes basic settings when only a list of proxies is provided.
