@@ -514,19 +514,31 @@
                 }
                 const lines = text.split('\n');
                 const proxies = [];
+
+                // 辅助函数：从 URLSearchParams 中获取参数，支持多种别名
+                const getParam = (params, keys) => {
+                    for (const key of keys) {
+                        const val = params.get(key);
+                        if (val !== null && val !== undefined) return val;
+                    }
+                    return null;
+                };
+
                 for (let line of lines) {
                     line = line.trim();
                     if (!line || line.startsWith('#')) continue;
                     try {
                         let proxy = null;
                         const protocolMatch = line.match(/^([a-z0-9]+):\/\//);
-                        if (protocolMatch) {
-                            const protocol = protocolMatch[1].toLowerCase();
-                            const supported = ['vmess', 'vless', 'trojan', 'hysteria2', 'hy2', 'tuic', 'hysteria', 'socks5', 'http', 'https', 'ss', 'ssr', 'wireguard'];
-                            if (!supported.includes(protocol)) {
-                                proxies.push({ name: `[Clash不支持] ${line.split('#')[1] || protocol}`, type: 'unsupported' });
-                                continue;
-                            }
+                        if (!protocolMatch) continue;
+
+                        const protocol = protocolMatch[1].toLowerCase();
+                        // 严格白名单：必须是 Clash Meta 原生或广泛支持的协议
+                        const supported = ['vmess', 'vless', 'trojan', 'hysteria2', 'hy2', 'tuic', 'hysteria', 'socks5', 'http', 'https', 'ss', 'ssr', 'wireguard'];
+
+                        if (!supported.includes(protocol)) {
+                            proxies.push({ name: `${line.split('#')[1] || protocol}`, type: 'unsupported' });
+                            continue;
                         }
 
                         if (line.startsWith('vmess://')) {
@@ -537,15 +549,16 @@
                                 uuid: config.id
                             };
                             if (proxy.port === undefined) delete proxy.port;
-                            if (config.aid !== undefined && config.aid !== "") proxy.alterId = parseInt(config.aid);
-                            if (config.scy) proxy.cipher = config.scy;
+                            if (config.aid !== undefined && config.aid !== "" && parseInt(config.aid) !== 0) proxy.alterId = parseInt(config.aid);
+                            if (config.scy && config.scy !== 'auto') proxy.cipher = config.scy;
 
                             if (config.tls === 'tls') {
                                 proxy.tls = true;
                                 if (config.sni) proxy.servername = config.sni;
                                 if (config.alpn) proxy.alpn = config.alpn.split(',');
-                                if (config.allowInsecure === 'true' || config.allowInsecure === true) proxy['skip-cert-verify'] = true;
+                                if (config.allowInsecure || config.allowInsecure === 'true') proxy['skip-cert-verify'] = true;
                             }
+
                             if (config.net === 'ws') {
                                 proxy.network = 'ws';
                                 proxy['ws-opts'] = {};
@@ -570,6 +583,7 @@
                             let type = url.protocol.replace(':', '');
                             if (type === 'hy2') type = 'hysteria2';
                             if (type === 'https') type = 'http';
+                            const params = url.searchParams;
 
                             proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || `${type}-${url.hostname || 'node'}`,
@@ -579,8 +593,9 @@
 
                             if (type === 'vless') {
                                 proxy.uuid = url.username;
-                                const flow = url.searchParams.get('flow');
+                                const flow = params.get('flow');
                                 if (flow) {
+                                    // Clash Meta 目前仅支持 vision 相关的流控
                                     if (flow.includes('vision')) {
                                         proxy.flow = flow;
                                     } else {
@@ -592,15 +607,16 @@
                                 proxy.password = url.username;
                             } else if (type === 'hysteria2') {
                                 proxy.password = url.username;
-                                const obfs = url.searchParams.get('obfs');
-                                if (obfs) {
+                                const obfs = params.get('obfs');
+                                if (obfs && obfs !== 'none') {
                                     proxy.obfs = obfs;
-                                    const op = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass') || url.searchParams.get('obfs_password');
+                                    const op = getParam(params, ['obfs-password', 'obfs_password', 'obfs-pass', 'obfs_pass']);
                                     if (op) proxy['obfs-password'] = op;
                                 }
-                                const up = url.searchParams.get('up') || url.searchParams.get('upload'); if (up) proxy.up = up;
-                                const down = url.searchParams.get('down') || url.searchParams.get('download'); if (down) proxy.down = down;
-                                const mport = url.searchParams.get('mport') || url.searchParams.get('ports');
+                                const up = getParam(params, ['up', 'upload']); if (up) proxy.up = up;
+                                const down = getParam(params, ['down', 'download']); if (down) proxy.down = down;
+
+                                const mport = getParam(params, ['mport', 'ports']);
                                 if (mport) {
                                     if (mport.includes('-') || mport.includes(',')) {
                                         proxy.ports = mport;
@@ -609,48 +625,50 @@
                                         proxy.port = parseInt(mport);
                                     }
                                 }
-                                const hi = url.searchParams.get('hop-interval') || url.searchParams.get('hop_interval');
+                                const hi = getParam(params, ['hop-interval', 'hop_interval']);
                                 if (hi) proxy['hop-interval'] = parseInt(hi);
+                                const sni = getParam(params, ['sni', 'peer']);
+                                if (sni) proxy.sni = sni;
                             } else if (type === 'tuic') {
                                 if (url.username) proxy.uuid = url.username;
                                 if (url.password) proxy.password = url.password;
-                                const token = url.searchParams.get('token');
-                                if (token) proxy.token = token;
-                                const cc = url.searchParams.get('congestion_control') || url.searchParams.get('congestion-controller');
+                                const token = params.get('token'); if (token) proxy.token = token;
+
+                                const cc = getParam(params, ['congestion-controller', 'congestion_control', 'cc']);
                                 if (cc) proxy['congestion-controller'] = cc;
-                                const urm = url.searchParams.get('udp_relay_mode') || url.searchParams.get('udp-relay-mode');
+                                const urm = getParam(params, ['udp-relay-mode', 'udp_relay_mode', 'urm']);
                                 if (urm) proxy['udp-relay-mode'] = urm;
-                                const hbi = url.searchParams.get('heartbeat_interval') || url.searchParams.get('heartbeat-interval');
+                                const hbi = getParam(params, ['heartbeat-interval', 'heartbeat_interval', 'hbi']);
                                 if (hbi) proxy['heartbeat-interval'] = parseInt(hbi);
-                                const rrtt = url.searchParams.get('reduce_rtt') || url.searchParams.get('reduce-rtt');
+                                const rrtt = getParam(params, ['reduce-rtt', 'reduce_rtt']);
                                 if (rrtt === '1' || rrtt === 'true') proxy['reduce-rtt'] = true;
-                                const rto = url.searchParams.get('request_timeout') || url.searchParams.get('request-timeout');
+                                const rto = getParam(params, ['request-timeout', 'request_timeout']);
                                 if (rto) proxy['request-timeout'] = parseInt(rto);
-                                const fo = url.searchParams.get('fast_open') || url.searchParams.get('fast-open');
+                                const fo = getParam(params, ['fast-open', 'fast_open']);
                                 if (fo === '1' || fo === 'true') proxy['fast-open'] = true;
-                                const dsni = url.searchParams.get('disable_sni') || url.searchParams.get('disable-sni');
+                                const dsni = getParam(params, ['disable-sni', 'disable_sni']);
                                 if (dsni === '1' || dsni === 'true') proxy['disable-sni'] = true;
-                                const ip = url.searchParams.get('ip');
-                                if (ip) proxy.ip = ip;
-                                const alpn = url.searchParams.get('alpn');
-                                if (alpn) proxy.alpn = alpn.split(',');
-                                const mudps = url.searchParams.get('max_udp_relay_packet_size') || url.searchParams.get('max-udp-relay-packet-size');
+                                const ip = params.get('ip'); if (ip) proxy.ip = ip;
+                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
+                                const mudps = getParam(params, ['max-udp-relay-packet-size', 'max_udp_relay_packet_size', 'mudps']);
                                 if (mudps) proxy['max-udp-relay-packet-size'] = parseInt(mudps);
-                                const mos = url.searchParams.get('max_open_streams') || url.searchParams.get('max-open-streams');
+                                const mos = getParam(params, ['max-open-streams', 'max_open_streams', 'mos']);
                                 if (mos) proxy['max-open-streams'] = parseInt(mos);
+                                const mds = getParam(params, ['max-datagram-size', 'max_datagram_size']);
+                                if (mds) proxy['max-datagram-size'] = parseInt(mds);
                             } else if (type === 'hysteria') {
                                 if (url.username) proxy.auth_str = url.username;
-                                const up = url.searchParams.get('up'); if (up) proxy.up = up;
-                                const down = url.searchParams.get('down'); if (down) proxy.down = down;
-                                const alpn = url.searchParams.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
-                                const mport = url.searchParams.get('mport');
+                                const up = params.get('up'); if (up) proxy.up = up;
+                                const down = params.get('down'); if (down) proxy.down = down;
+                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
+                                const mport = params.get('mport');
                                 if (mport) {
                                     proxy.port = mport;
                                     proxy.protocol = 'mports';
                                 }
-                                const fastOpen = url.searchParams.get('fast_open') || url.searchParams.get('fast-open');
-                                if (fastOpen === '1' || fastOpen === 'true') proxy['fast-open'] = true;
-                                const hop = url.searchParams.get('hop'); if (hop) proxy.hop = hop;
+                                const fo = getParam(params, ['fast-open', 'fast_open']);
+                                if (fo === '1' || fo === 'true') proxy['fast-open'] = true;
+                                const hop = params.get('hop'); if (hop) proxy.hop = hop;
                             } else if (type === 'http' || type === 'socks5') {
                                 if (url.username) proxy.username = url.username;
                                 if (url.password) proxy.password = url.password;
@@ -659,39 +677,43 @@
                                 if (url.username) proxy.password = decodeURIComponent(url.username);
                             }
 
-                            const security = url.searchParams.get('security');
-                            const sni = url.searchParams.get('sni') || url.searchParams.get('peer');
+                            // 共通 TLS/Security 解析
+                            const security = params.get('security');
+                            const sni = getParam(params, ['sni', 'peer']);
                             if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria', 'socks5'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
                                 proxy.tls = true;
                                 if (security === 'reality') {
                                     proxy['reality-opts'] = {};
-                                    const pbk = url.searchParams.get('pbk'); if (pbk) proxy['reality-opts']['public-key'] = pbk;
-                                    const sid = url.searchParams.get('sid'); if (sid) proxy['reality-opts']['short-id'] = sid;
+                                    const pbk = getParam(params, ['pbk', 'public-key']); if (pbk) proxy['reality-opts']['public-key'] = pbk;
+                                    const sid = getParam(params, ['sid', 'short-id']); if (sid) proxy['reality-opts']['short-id'] = sid;
+                                    const spx = getParam(params, ['spx', 'spider-x']); if (spx) proxy['reality-opts']['spider-x'] = spx;
                                     if (Object.keys(proxy['reality-opts']).length === 0) delete proxy['reality-opts'];
                                 }
                                 if (sni) proxy.servername = sni;
-                                const fp = url.searchParams.get('fp') || url.searchParams.get('fingerprint');
+                                const fp = getParam(params, ['fp', 'fingerprint', 'client-fingerprint']);
                                 if (fp) proxy['client-fingerprint'] = fp;
-                                const alpn = url.searchParams.get('alpn');
+                                const alpn = params.get('alpn');
                                 if (alpn && !proxy.alpn) proxy.alpn = alpn.split(',');
-                                if (url.searchParams.get('insecure') === '1' || url.searchParams.get('allowInsecure') === '1') proxy['skip-cert-verify'] = true;
+                                const insecure = getParam(params, ['insecure', 'allowInsecure', 'skip-cert-verify']);
+                                if (insecure === '1' || insecure === 'true') proxy['skip-cert-verify'] = true;
                             }
 
-                            const network = url.searchParams.get('type');
+                            // 共通网络层解析
+                            const network = getParam(params, ['type', 'net', 'network']);
                             if (network === 'ws') {
                                 proxy.network = 'ws';
                                 proxy['ws-opts'] = {};
-                                const path = url.searchParams.get('path'); if (path) proxy['ws-opts'].path = path;
-                                const host = url.searchParams.get('host'); if (host) proxy['ws-opts'].headers = { Host: host };
+                                const path = params.get('path'); if (path) proxy['ws-opts'].path = path;
+                                const host = params.get('host'); if (host) proxy['ws-opts'].headers = { Host: host };
                                 if (Object.keys(proxy['ws-opts']).length === 0) delete proxy['ws-opts'];
                             } else if (network === 'grpc') {
                                 proxy.network = 'grpc';
-                                const sn = url.searchParams.get('serviceName'); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
+                                const sn = getParam(params, ['serviceName', 'grpc-service-name']); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
                             } else if (network === 'h2') {
                                 proxy.network = 'h2';
                                 proxy['h2-opts'] = {};
-                                const path = url.searchParams.get('path'); if (path) proxy['h2-opts'].path = path;
-                                const host = url.searchParams.get('host'); if (host) proxy['h2-opts'].host = host.split(',');
+                                const path = params.get('path'); if (path) proxy['h2-opts'].path = path;
+                                const host = params.get('host'); if (host) proxy['h2-opts'].host = host.split(',');
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('ss://')) {
@@ -761,18 +783,21 @@
                             }
                         } else if (line.startsWith('wireguard://')) {
                             const url = new URL(line);
+                            const params = url.searchParams;
                             proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || `wg-${url.hostname || 'node'}`,
                                 type: 'wireguard', server: url.hostname, port: url.port ? parseInt(url.port) : undefined,
-                                'private-key': url.searchParams.get('privateKey') || '',
-                                'public-key': url.searchParams.get('publicKey') || ''
+                                'private-key': getParam(params, ['privateKey', 'private_key']) || '',
+                                'public-key': getParam(params, ['publicKey', 'public_key']) || ''
                             };
                             if (proxy.port === undefined) delete proxy.port;
-                            const wgIp = url.searchParams.get('address'); if (wgIp) proxy.ip = wgIp;
-                            const reserved = url.searchParams.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
-                            const psk = url.searchParams.get('presharedKey'); if (psk) proxy['preshared-key'] = psk;
-                            const mtu = url.searchParams.get('mtu'); if (mtu) proxy.mtu = parseInt(mtu);
-                            const udp = url.searchParams.get('udp'); if (udp === '1' || udp === 'true') proxy.udp = true;
+                            const wgIp = getParam(params, ['address', 'ip']); if (wgIp) proxy.ip = wgIp;
+                            const reserved = params.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
+                            const psk = getParam(params, ['presharedKey', 'preshared_key', 'psk']); if (psk) proxy['preshared-key'] = psk;
+                            const mtu = params.get('mtu'); if (mtu) proxy.mtu = parseInt(mtu);
+                            const udp = params.get('udp'); if (udp === '1' || udp === 'true') proxy.udp = true;
+                            const pre = params.get('pre'); if (pre) proxy.pre = pre;
+                            const remote_is_scanner = params.get('remote-is-scanner'); if (remote_is_scanner) proxy['remote-is-scanner'] = (remote_is_scanner === 'true');
                             proxies.push(proxy);
                         }
                     } catch (e) {
@@ -789,8 +814,8 @@
                     }
 
                     if (hasUnsupported) {
-                        return "# ⚠ 部分协议 Clash 不支持，已在下方列出或跳过\n" +
-                            proxies.filter(p => p.type === 'unsupported').map(p => `# Clash不支持: ${p.name}`).join('\n') +
+                        return "# ⚠ 部分链接无法转换（协议不支持或流控不匹配），已跳过：\n" +
+                            proxies.filter(p => p.type === 'unsupported').map(p => `# 不受支持: ${p.name}`).join('\n') +
                             "\n\n" + yaml;
                     }
                     return yaml;
