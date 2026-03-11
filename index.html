@@ -563,6 +563,8 @@
                                     proxy.obfs = obfs;
                                     proxy['obfs-password'] = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass') || '';
                                 }
+                                const mport = url.searchParams.get('mport');
+                                if (mport) proxy.port = mport;
                             } else if (type === 'tuic') {
                                 proxy.uuid = url.username;
                                 proxy.password = url.password;
@@ -575,7 +577,13 @@
                                 proxy.up = url.searchParams.get('up') || '10';
                                 proxy.down = url.searchParams.get('down') || '50';
                                 proxy.alpn = (url.searchParams.get('alpn') || 'h3').split(',');
-                                proxy.protocol = url.searchParams.get('mport') ? 'mports' : 'udp';
+                                const mport = url.searchParams.get('mport');
+                                if (mport) {
+                                    proxy.port = mport;
+                                    proxy.protocol = 'mports';
+                                } else {
+                                    proxy.protocol = 'udp';
+                                }
                             } else if (type === 'http' || type === 'socks5') {
                                 proxy.username = url.username;
                                 proxy.password = url.password;
@@ -594,7 +602,6 @@
                                         'short-id': url.searchParams.get('sid') || ''
                                     };
                                 }
-                                const sni = url.searchParams.get('sni') || url.searchParams.get('peer');
                                 if (sni) proxy.servername = sni;
                                 const fp = url.searchParams.get('fp');
                                 if (fp) proxy['client-fingerprint'] = fp;
@@ -642,7 +649,21 @@
                                 }
                             }
                             if (server && port) {
-                                proxies.push({ name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password, udp: true });
+                                proxy = { name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password, udp: true };
+                                const plugin = new URLSearchParams(line.split('?')[1] || '').get('plugin');
+                                if (plugin) {
+                                    // 粗略解析 SS 插件，Meta 支持常用插件
+                                    const pParts = decodeURIComponent(plugin).split(';');
+                                    proxy.plugin = pParts[0];
+                                    if (pParts.length > 1) {
+                                        proxy['plugin-opts'] = {};
+                                        pParts.slice(1).forEach(opt => {
+                                            const kv = opt.split('=');
+                                            if (kv.length === 2) proxy['plugin-opts'][kv[0]] = kv[1];
+                                        });
+                                    }
+                                }
+                                proxies.push(proxy);
                             }
                         } else if (line.startsWith('ssr://')) {
                             const payload = decodeBase64Safe(line.slice(6));
@@ -673,9 +694,12 @@
                                 ip: url.searchParams.get('address') || '10.0.0.2',
                                 'private-key': url.searchParams.get('privateKey') || '',
                                 'public-key': url.searchParams.get('publicKey') || '',
+                                reserved: url.searchParams.get('reserved') ? url.searchParams.get('reserved').split(',').map(Number) : undefined,
+                                'preshared-key': url.searchParams.get('presharedKey') || undefined,
                                 mtu: parseInt(url.searchParams.get('mtu') || '1420'),
                                 udp: true
                             };
+                            proxies.push(proxy);
                         }
                     } catch (e) {
                         console.warn("解析节点失败:", line, e);
@@ -690,6 +714,24 @@
                         'allow-lan': true,
                         'mode': 'rule',
                         'log-level': 'info',
+                        'ipv6': false,
+                        'dns': {
+                            'enable': true,
+                            'listen': '0.0.0.0:1053',
+                            'ipv6': false,
+                            'enhanced-mode': 'fake-ip',
+                            'fake-ip-range': '198.18.0.1/16',
+                            'nameserver': ['https://dns.google/dns-query', 'https://1.1.1.1/dns-query'],
+                            'fallback': ['https://dns.google/dns-query', 'https://1.1.1.1/dns-query']
+                        },
+                        'sniffer': {
+                            'enable': true,
+                            'sniff': {
+                                'TLS': { 'ports': [443, 8443], 'override-destination': true },
+                                'HTTP': { 'ports': [80, '8080-8880'], 'override-destination': true },
+                                'QUIC': { 'ports': [443, 8443] }
+                            }
+                        },
                         'proxies': proxies,
                         'proxy-groups': [
                             {
@@ -710,6 +752,10 @@
                             'DOMAIN-WILDCARD,*.google.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.youtube.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.github.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.openai.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.chatgpt.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.anthropic.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.claude.ai,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.googlevideo.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.gstatic.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.googleusercontent.com,🚀 节点选择',
