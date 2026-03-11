@@ -525,9 +525,10 @@ const html_content = `<!DOCTYPE html>
                             const proxy = {
                                 name: config.ps || 'vmess-' + Math.random().toString(36).substr(2, 5),
                                 type: 'vmess', server: config.add, port: parseInt(config.port),
-                                uuid: config.id, alterId: parseInt(config.aid || 0), cipher: config.scy || "auto",
-                                udp: true
+                                uuid: config.id
                             };
+                            if (config.aid !== undefined && config.aid !== "") proxy.alterId = parseInt(config.aid);
+                            if (config.scy) proxy.cipher = config.scy;
                             if (config.tls === 'tls') {
                                 proxy.tls = true;
                                 if (config.sni) proxy.servername = config.sni;
@@ -549,8 +550,7 @@ const html_content = `<!DOCTYPE html>
 
                             const proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || \`\${type}-\${Math.random().toString(36).substr(2, 5)}\`,
-                                type: type, server: url.hostname, port: parseInt(url.port) || 443,
-                                udp: true
+                                type: type, server: url.hostname, port: parseInt(url.port) || (['hysteria2', 'tuic', 'hysteria', 'http', 'https'].includes(type) ? 443 : 80)
                             };
 
                             if (type === 'vless') {
@@ -575,15 +575,13 @@ const html_content = `<!DOCTYPE html>
                                 if (urm) proxy['udp-relay-mode'] = urm;
                             } else if (type === 'hysteria') {
                                 proxy.auth_str = url.username;
-                                proxy.up = url.searchParams.get('up') || '10';
-                                proxy.down = url.searchParams.get('down') || '50';
-                                proxy.alpn = (url.searchParams.get('alpn') || 'h3').split(',');
+                                const up = url.searchParams.get('up'); if (up) proxy.up = up;
+                                const down = url.searchParams.get('down'); if (down) proxy.down = down;
+                                const alpn = url.searchParams.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
                                 const mport = url.searchParams.get('mport');
                                 if (mport) {
                                     proxy.port = mport;
                                     proxy.protocol = 'mports';
-                                } else {
-                                    proxy.protocol = 'udp';
                                 }
                             } else if (type === 'http' || type === 'socks5') {
                                 proxy.username = url.username;
@@ -650,7 +648,7 @@ const html_content = `<!DOCTYPE html>
                                 }
                             }
                             if (server && port) {
-                                proxy = { name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password, udp: true };
+                                proxy = { name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password };
                                 const plugin = new URLSearchParams(line.split('?')[1] || '').get('plugin');
                                 if (plugin) {
                                     // 粗略解析 SS 插件，Meta 支持常用插件
@@ -683,8 +681,7 @@ const html_content = `<!DOCTYPE html>
                                     type: 'ssr', server: server, port: port,
                                     password: password, cipher: method,
                                     protocol: protocol, 'protocol-param': decodeURIComponent(params.get('protoparam') || ''),
-                                    obfs: obfs, 'obfs-param': decodeURIComponent(params.get('obfsparam') || ''),
-                                    udp: true
+                                    obfs: obfs, 'obfs-param': decodeURIComponent(params.get('obfsparam') || '')
                                 };
                             }
                         } else if (line.startsWith('wireguard://')) {
@@ -692,14 +689,13 @@ const html_content = `<!DOCTYPE html>
                             proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || 'wg-' + Math.random().toString(36).substr(2, 5),
                                 type: 'wireguard', server: url.hostname, port: parseInt(url.port) || 51820,
-                                ip: url.searchParams.get('address') || '10.0.0.2',
                                 'private-key': url.searchParams.get('privateKey') || '',
-                                'public-key': url.searchParams.get('publicKey') || '',
-                                reserved: url.searchParams.get('reserved') ? url.searchParams.get('reserved').split(',').map(Number) : undefined,
-                                'preshared-key': url.searchParams.get('presharedKey') || undefined,
-                                mtu: parseInt(url.searchParams.get('mtu') || '1420'),
-                                udp: true
+                                'public-key': url.searchParams.get('publicKey') || ''
                             };
+                            const wgIp = url.searchParams.get('address'); if (wgIp) proxy.ip = wgIp;
+                            const reserved = url.searchParams.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
+                            const psk = url.searchParams.get('presharedKey'); if (psk) proxy['preshared-key'] = psk;
+                            const mtu = url.searchParams.get('mtu'); if (mtu) proxy.mtu = parseInt(mtu);
                             proxies.push(proxy);
                         }
                     } catch (e) {
