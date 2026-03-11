@@ -50,14 +50,15 @@
 
 ### 核心功能
 
-- **全协议支持**：支持 VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, Snell, Shadow-TLS 及 HTTP/Socks5 链接解析。
-- **协议兼容性检查**：自动识别不支持的流控或协议，并在输出结果中明确标记原因，避免运行错误。
-- **配置保留/补全**：
-  - 输入完整 Clash 配置时，保留原有的代理组、路由规则及 DNS 设置，仅注入 Socks5 接口。
-  - 输入纯节点列表时，自动补全基础配置。
-- **智能 i18n 系统**：支持中英双语界面一键切换，报错及转换警告信息同步跟随语言环境。
-- **极致体验**：起始端口本地配置记忆（LocalStorage）。
-- **隐私安全**：100% 浏览器内本地执行，不向任何服务器发送节点数据。
+- **全协议支持**：极速解析 VMess, VLESS (Vision/Reality), Trojan, Hysteria 1/2, Tuic (v4/v5), Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, Snell, Shadow-TLS 及 HTTP/Socks5。
+- **严格协议准入**：根据 `wiki.metacubex.one` 规范，自动过滤不支持的旧版 XTLS 流控或非法协议组合，输出明确的 `🛑 Clash不支持` 警告。
+- **全参数映射 (Meta 增强)**：深度支持 TUIC 拥塞控制、Hysteria2 端口跳跃、Reality 公钥/短 ID、各协议 TLS 指纹 (Fingerprint) 及 ALPN 等高级配置。
+- **智能防冲突**：自动识别并处理订阅中的重复节点名称，确保生成的配置在 Clash/Mihomo 客户端中 100% 合法可用。
+- **配置保留/注入**：
+  - 输入完整 Clash YAML 时，保留原有的代理组、路由规则及 DNS 设置，仅注入 Socks5 接口。
+  - 输入纯节点列表时，自动生成标准的极简补全配置。
+- **智能 i18n 系统**：根据浏览器环境自动切换中英双语，所有转换警告与报错信息均同步国际化。
+- **隐私与安全**：100% 浏览器内本地执行，起始端口持久化记忆（LocalStorage），绝不上传任何数据。
 
 ### 关于多平台部署适配
 
@@ -174,14 +175,15 @@ No server-side dependency — completely eliminates the risk of privacy leaks.
 
 ### Key Features
 
-- **Full Protocol Support**: Supports parsing for VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, Snell, Shadow-TLS, and HTTP/Socks5 links.
-- **Protocol Compatibility Check**: Automatically identifies unsupported flows or protocols and explicitly marks the reason in the output, preventing runtime errors.
-- **Config Preservation & Completion**:
-  - Preserves original proxy groups, routing rules, and DNS settings when a full Clash config is provided.
-  - Automatically completes basic settings when only a list of proxies is provided.
-- **Smart i18n System**: One-click toggle between English and Chinese. Error and conversion warning messages automatically follow the chosen language.
-- **Enhanced Experience**: Starting port persistence (LocalStorage).
-- **Privacy-First**: 100% local processing inside your browser. No node data ever leaves your device.
+- **Full Protocol Support**: High-speed parsing for VMess, VLESS (Vision/Reality), Trojan, Hysteria 1/2, Tuic (v4/v5), Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, Snell, Shadow-TLS, and HTTP/Socks5 links.
+- **Strict Protocol Check**: Adheres to `wiki.metacubex.one` standards. Automatically filters unsupported XTLS variants or legacy protocols, providing clear `🛑 Unsupported` warnings.
+- **Full Parameter Mapping**: Comprehensive support for TUIC congestion control, Hysteria2 port hopping, Reality public keys/short IDs, TLS fingerprints, ALPN, and other Meta-enhanced fields.
+- **Smart Collision Handling**: Automatically identifies and resolves duplicate node names in subscriptions to ensure generated configs are 100% valid for Clash/Mihomo kernels.
+- **Config Management**:
+  - Preserves original proxy groups, rules, and DNS when a full YAML is provided.
+  - Automatically generates minimalist boilerplate for raw proxy lists.
+- **Dynamic i18n**: Automatic language detection (CN/EN). All conversion logs and error messages are fully localized.
+- **Privacy-First**: 100% local processing in the browser with LocalStorage support for port persistence. No data ever leaves your device.
 
 ## Multi-Platform Deployment
 

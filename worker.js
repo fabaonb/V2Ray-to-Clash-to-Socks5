@@ -533,20 +533,34 @@ const html_content = `<!DOCTYPE html>
 
             function parseV2rayNConfig(text) {
                 if (!text) return null;
+                // 支持多行 Base64
                 if (!text.includes('://')) {
                     let maybeDecoded = decodeBase64Safe(text);
                     if (maybeDecoded && maybeDecoded.includes('://')) text = maybeDecoded;
                 }
                 const lines = text.split('\\n');
-                const proxies = [];
+                const rawProxies = [];
+                const nameCount = {}; // 用于处理重名
 
                 // 辅助函数：从 URLSearchParams 中获取参数，支持多种别名
                 const getParam = (params, keys) => {
                     for (const key of keys) {
                         const val = params.get(key);
-                        if (val !== null && val !== undefined) return val;
+                        if (val !== null && val !== undefined && val !== "") return val;
                     }
                     return null;
+                };
+
+                // 辅助函数：重名处理
+                const getUniqueName = (name) => {
+                    let finalName = name || 'unnamed-node';
+                    if (nameCount[finalName]) {
+                        const count = nameCount[finalName];
+                        nameCount[finalName]++;
+                        return \`\${finalName} (\${count})\`;
+                    }
+                    nameCount[finalName] = 1;
+                    return finalName;
                 };
 
                 for (let line of lines) {
@@ -558,14 +572,14 @@ const html_content = `<!DOCTYPE html>
                         if (!protocolMatch) continue;
 
                         const protocol = protocolMatch[1].toLowerCase();
-                        // 严格白名单：必须是 Clash Meta 原生支持的协议
+                        // 严格支持白名单
                         const supported = ['vmess', 'vless', 'trojan', 'hysteria2', 'hy2', 'tuic', 'hysteria', 'socks5', 'socks', 'http', 'https', 'ss', 'ssr', 'wireguard', 'snell', 'shadow-tls'];
 
                         if (!supported.includes(protocol)) {
-                            proxies.push({
+                            rawProxies.push({
                                 name: decodeURIComponent(line.split('#')[1] || protocol),
                                 type: 'unsupported',
-                                reason: getI18nStr('t_unsupported_protocol')
+                                reason: getI18nStr('t_unsupported_protocol') + \`: \${protocol}\`
                             });
                             continue;
                         }
@@ -577,12 +591,12 @@ const html_content = `<!DOCTYPE html>
                             try {
                                 config = JSON.parse(decodeBase64Safe(configStr));
                             } catch (e) {
-                                proxies.push({ name: 'Invalid VMess', type: 'unsupported', reason: getI18nStr('t_invalid_vmess') });
+                                rawProxies.push({ name: 'Invalid VMess', type: 'unsupported', reason: getI18nStr('t_invalid_vmess') });
                                 continue;
                             }
 
                             proxy = {
-                                name: config.ps || \`vmess-\${config.add || 'node'}\`,
+                                name: getUniqueName(config.ps || \`vmess-\${config.add || 'node'}\`),
                                 type: 'vmess',
                                 server: config.add,
                                 port: config.port ? parseInt(config.port) : 443,
@@ -595,7 +609,7 @@ const html_content = `<!DOCTYPE html>
                             if (config.tls === 'tls') {
                                 proxy.tls = true;
                                 if (config.sni) proxy.servername = config.sni;
-                                if (config.alpn) proxy.alpn = config.alpn.split(',');
+                                if (config.alpn) proxy.alpn = config.alpn.split(',').map(s => s.trim());
                                 if (config.allowInsecure || config.allowInsecure === 'true') proxy['skip-cert-verify'] = true;
                                 if (config.fp) proxy['client-fingerprint'] = config.fp;
                             }
@@ -626,12 +640,8 @@ const html_content = `<!DOCTYPE html>
                                 };
                             }
 
-                            // 预备所有可能参数
                             if (config.packetEncoding) proxy['packet-encoding'] = config.packetEncoding;
-                            if (config.globalPadding === 'true') proxy['global-padding'] = true;
-                            if (config.authenticatedLength === 'true') proxy['authenticated-length'] = true;
 
-                            proxies.push(proxy);
                         } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://') || line.startsWith('hysteria://') || line.startsWith('socks5://') || line.startsWith('socks://') || line.startsWith('http://') || line.startsWith('https://') || line.startsWith('snell://') || line.startsWith('shadow-tls://')) {
                             const url = new URL(line);
                             let type = url.protocol.replace(':', '');
@@ -641,7 +651,7 @@ const html_content = `<!DOCTYPE html>
                             const params = url.searchParams;
 
                             proxy = {
-                                name: decodeURIComponent(url.hash.slice(1)) || \`\${type}-\${url.hostname || 'node'}\`,
+                                name: getUniqueName(decodeURIComponent(url.hash.slice(1)) || \`\${type}-\${url.hostname || 'node'}\`),
                                 type: type,
                                 server: url.hostname,
                                 port: url.port ? parseInt(url.port) : 443,
@@ -655,7 +665,7 @@ const html_content = `<!DOCTYPE html>
                                     if (flow.includes('vision')) {
                                         proxy.flow = flow;
                                     } else {
-                                        proxies.push({
+                                        rawProxies.push({
                                             name: proxy.name,
                                             type: 'unsupported',
                                             reason: \`\${getI18nStr('t_unsupported_flow')}: \${flow}\`
@@ -663,17 +673,19 @@ const html_content = `<!DOCTYPE html>
                                         continue;
                                     }
                                 }
-                                const pe = params.get('packet-encoding') || params.get('packetEncoding');
+                                const pe = getParam(params, ['packet-encoding', 'packetEncoding', 'pe']);
                                 if (pe) proxy['packet-encoding'] = pe;
+
                             } else if (type === 'trojan') {
                                 proxy.password = url.username;
                             } else if (type === 'snell') {
                                 proxy.psk = url.username;
-                                const version = params.get('version'); if (version) proxy.version = version;
+                                const version = params.get('version'); if (version) proxy.version = parseInt(version);
                             } else if (type === 'shadow-tls') {
                                 proxy.password = url.username;
                                 const version = params.get('version'); if (version) proxy.version = parseInt(version);
                                 const host = params.get('host'); if (host) proxy.host = host;
+                                const sni = getParam(params, ['sni', 'peer']); if (sni) proxy.sni = sni;
                             } else if (type === 'hysteria2') {
                                 proxy.password = url.username;
                                 const obfs = params.get('obfs');
@@ -699,9 +711,14 @@ const html_content = `<!DOCTYPE html>
                                 const sni = getParam(params, ['sni', 'peer']);
                                 if (sni) proxy.sni = sni;
                             } else if (type === 'tuic') {
-                                if (url.username) proxy.uuid = url.username;
-                                if (url.password) proxy.password = url.password;
-                                const token = params.get('token'); if (token) proxy.token = token;
+                                // TUIC v5 使用 uuid 和 password, v4 使用 token
+                                const token = params.get('token');
+                                if (token) {
+                                    proxy.token = token;
+                                } else {
+                                    if (url.username) proxy.uuid = url.username;
+                                    if (url.password) proxy.password = url.password;
+                                }
 
                                 const cc = getParam(params, ['congestion-controller', 'congestion_control', 'cc']);
                                 if (cc) proxy['congestion-controller'] = cc;
@@ -718,7 +735,8 @@ const html_content = `<!DOCTYPE html>
                                 const dsni = getParam(params, ['disable-sni', 'disable_sni']);
                                 if (dsni === '1' || dsni === 'true') proxy['disable-sni'] = true;
                                 const ip = params.get('ip'); if (ip) proxy.ip = ip;
-                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
+                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',').map(s => s.trim());
+
                                 const mudps = getParam(params, ['max-udp-relay-packet-size', 'max_udp_relay_packet_size', 'mudps']);
                                 if (mudps) proxy['max-udp-relay-packet-size'] = parseInt(mudps);
                                 const mos = getParam(params, ['max-open-streams', 'max_open_streams', 'mos']);
@@ -739,7 +757,7 @@ const html_content = `<!DOCTYPE html>
                                 if (url.username) proxy['auth-str'] = url.username;
                                 const up = params.get('up'); if (up) proxy.up = up;
                                 const down = params.get('down'); if (down) proxy.down = down;
-                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
+                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',').map(s => s.trim());
                                 const mport = params.get('mport');
                                 if (mport) {
                                     if (mport.includes('-') || mport.includes(',')) {
@@ -752,18 +770,17 @@ const html_content = `<!DOCTYPE html>
                                 const fo = getParam(params, ['fast-open', 'fast_open']);
                                 if (fo === '1' || fo === 'true') proxy['fast-open'] = true;
                                 const hop = params.get('hop'); if (hop) proxy.hop = hop;
+                                const sni = getParam(params, ['sni', 'peer']); if (sni) proxy.sni = sni;
                             } else if (type === 'http' || type === 'socks5') {
                                 if (url.username) proxy.username = url.username;
                                 if (url.password) proxy.password = url.password;
                                 if (type === 'http' && url.protocol === 'https:') proxy.tls = true;
-                            } else {
-                                if (url.username) proxy.password = decodeURIComponent(url.username);
                             }
 
                             // 共通 TLS/Security 解析
-                            const security = params.get('security');
-                            const sniVal = getParam(params, ['sni', 'peer']);
-                            if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria', 'socks5', 'snell', 'shadow-tls'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
+                            const security = getParam(params, ['security', 'streamSecurity']);
+                            const sniVal = getParam(params, ['sni', 'peer', 'servername']);
+                            if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria', 'snell', 'shadow-tls'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
                                 proxy.tls = true;
                                 if (security === 'reality') {
                                     proxy['reality-opts'] = {};
@@ -784,7 +801,7 @@ const html_content = `<!DOCTYPE html>
                                 const fp = getParam(params, ['fp', 'fingerprint', 'client-fingerprint', 'browser']);
                                 if (fp) proxy['client-fingerprint'] = fp;
                                 const alpn = params.get('alpn');
-                                if (alpn && !proxy.alpn) proxy.alpn = alpn.split(',');
+                                if (alpn && !proxy.alpn) proxy.alpn = alpn.split(',').map(s => s.trim());
                                 const insecure = getParam(params, ['insecure', 'allowInsecure', 'skip-cert-verify']);
                                 if (insecure === '1' || insecure === 'true') proxy['skip-cert-verify'] = true;
                             }
@@ -801,7 +818,8 @@ const html_content = `<!DOCTYPE html>
                                     if (!proxy['ws-opts'].headers) delete proxy['ws-opts'].headers;
                                 } else if (network === 'grpc') {
                                     proxy.network = 'grpc';
-                                    const sn = getParam(params, ['serviceName', 'grpc-service-name']); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
+                                    const sn = getParam(params, ['serviceName', 'grpc-service-name']);
+                                    proxy['grpc-opts'] = { 'grpc-service-name': sn || 'GunService' };
                                 } else if (network === 'h2') {
                                     proxy.network = 'h2';
                                     proxy['h2-opts'] = {
@@ -810,50 +828,94 @@ const html_content = `<!DOCTYPE html>
                                     };
                                 }
                             }
-                            proxies.push(proxy);
+                            rawProxies.push(proxy);
+
                         } else if (line.startsWith('ss://')) {
+                            // Shadowsocks 解析增强
                             let hash = ''; let main = line.slice(5);
                             if (main.includes('#')) { const parts = main.split('#'); hash = decodeURIComponent(parts[1]); main = parts[0]; }
+
                             let method = '', password = '', server = '', port = '';
 
-                            if (main.includes('@')) {
-                                const parts = main.split('@');
-                                const credentials = decodeBase64Safe(parts[0]);
-                                if (credentials.includes(':')) {
-                                    const cParts = credentials.split(':');
+                            // 情况1: ss://BASE64(method:password@host:port)
+                            // 情况2: ss://BASE64(method:password)@host:port
+                            // 情况3: ss://method:password@host:port (非标)
+
+                            const atIndex = main.lastIndexOf('@');
+                            if (atIndex !== -1) {
+                                // 可能属于 情况2 或 情况3
+                                const credentialsPart = main.slice(0, atIndex);
+                                const serverPart = main.slice(atIndex + 1);
+
+                                const decodedCredentials = decodeBase64Safe(credentialsPart);
+                                if (decodedCredentials.includes(':')) {
+                                    const cParts = decodedCredentials.split(':');
+                                    method = cParts[0]; password = cParts[1];
+                                } else if (credentialsPart.includes(':')) {
+                                    const cParts = credentialsPart.split(':');
                                     method = cParts[0]; password = cParts[1];
                                 }
-                                const serverPart = parts[1];
+
                                 if (serverPart.includes(':')) {
                                     const sParts = serverPart.split(':');
-                                    server = sParts[0]; port = parseInt(sParts[1]);
+                                    server = sParts[0];
+                                    const portPart = sParts[1].split('?')[0]; // 处理可能带参数的情况
+                                    port = parseInt(portPart);
                                 }
                             } else {
+                                // 可能属于 情况1
                                 const decoded = decodeBase64Safe(main);
-                                const parts = decoded.split('@');
-                                if (parts.length === 2) {
-                                    const cParts = parts[0].split(':');
-                                    method = cParts[0]; password = cParts[1];
-                                    const sParts = parts[1].split(':');
-                                    server = sParts[0]; port = parseInt(sParts[1]);
-                                }
-                            }
-                            if (server && port) {
-                                proxy = { name: hash || \`ss-\${server}\`, type: 'ss', server: server, port: port, cipher: method, password: password, udp: true };
-                                const urlObj = new URL(line);
-                                const plugin = urlObj.searchParams.get('plugin');
-                                if (plugin) {
-                                    const pParts = decodeURIComponent(plugin).split(';');
-                                    proxy.plugin = pParts[0];
-                                    if (pParts.length > 1) {
-                                        proxy['plugin-opts'] = {};
-                                        pParts.slice(1).forEach(opt => {
-                                            const kv = opt.split('=');
-                                            if (kv.length === 2) proxy['plugin-opts'][kv[0]] = kv[1];
-                                        });
+                                const lastAtIndex = decoded.lastIndexOf('@');
+                                if (lastAtIndex !== -1) {
+                                    const credentials = decoded.slice(0, lastAtIndex);
+                                    const serverInfo = decoded.slice(lastAtIndex + 1);
+
+                                    if (credentials.includes(':')) {
+                                        const cParts = credentials.split(':');
+                                        method = cParts[0]; password = cParts[1];
+                                    }
+                                    if (serverInfo.includes(':')) {
+                                        const sParts = serverInfo.split(':');
+                                        server = sParts[0]; port = parseInt(sParts[1]);
                                     }
                                 }
-                                proxies.push(proxy);
+                            }
+
+                            if (server && port && method && password) {
+                                proxy = {
+                                    name: getUniqueName(hash || \`ss-\${server}\`),
+                                    type: 'ss',
+                                    server: server,
+                                    port: port,
+                                    cipher: method,
+                                    password: password,
+                                    udp: true
+                                };
+
+                                // 处理插件
+                                try {
+                                    const urlObj = new URL(line);
+                                    const plugin = urlObj.searchParams.get('plugin');
+                                    if (plugin) {
+                                        const pParts = decodeURIComponent(plugin).split(';');
+                                        proxy.plugin = pParts[0];
+                                        if (pParts.length > 1) {
+                                            proxy['plugin-opts'] = {};
+                                            pParts.slice(1).forEach(opt => {
+                                                const kv = opt.split('=');
+                                                if (kv.length === 2) proxy['plugin-opts'][kv[0]] = kv[1];
+                                            });
+                                        }
+                                    }
+                                } catch (e) { }
+
+                                rawProxies.push(proxy);
+                            } else {
+                                rawProxies.push({
+                                    name: hash || 'ss-node',
+                                    type: 'unsupported',
+                                    reason: 'Shadowsocks URL format error or unsupported base64 content'
+                                });
                             }
                         } else if (line.startsWith('ssr://')) {
                             const payload = decodeBase64Safe(line.slice(6));
@@ -868,40 +930,54 @@ const html_content = `<!DOCTYPE html>
                                 const password = decodeBase64Safe(suffix[0]);
                                 const params = new URLSearchParams(suffix[1] || '');
                                 proxy = {
-                                    name: decodeURIComponent(params.get('remarks') || '') || \`ssr-\${server}\`,
+                                    name: getUniqueName(decodeURIComponent(params.get('remarks') || '') || \`ssr-\${server}\`),
                                     type: 'ssr', server: server, port: port,
                                     password: password, cipher: method,
                                     protocol: protocol, 'protocol-param': decodeURIComponent(params.get('protoparam') || ''),
                                     obfs: obfs, 'obfs-param': decodeURIComponent(params.get('obfsparam') || ''),
                                     udp: true
                                 };
-                                proxies.push(proxy);
+                                rawProxies.push(proxy);
                             }
                         } else if (line.startsWith('wireguard://')) {
                             const url = new URL(line);
                             const params = url.searchParams;
                             proxy = {
-                                name: decodeURIComponent(url.hash.slice(1)) || \`wg-\${url.hostname || 'node'}\`,
-                                type: 'wireguard', server: url.hostname, port: url.port ? parseInt(url.port) : 51820,
+                                name: getUniqueName(decodeURIComponent(url.hash.slice(1)) || \`wg-\${url.hostname || 'node'}\`),
+                                type: 'wireguard',
+                                server: url.hostname,
+                                port: url.port ? parseInt(url.port) : 51820,
                                 'private-key': getParam(params, ['privateKey', 'private_key']) || '',
                                 'public-key': getParam(params, ['publicKey', 'public_key']) || '',
                                 udp: true
                             };
-                            const wgIp = getParam(params, ['address', 'ip']); if (wgIp) proxy.ip = wgIp;
+                            const wgIp = getParam(params, ['address', 'ip']);
+                            if (wgIp) {
+                                if (wgIp.includes(',')) {
+                                    const ipParts = wgIp.split(',');
+                                    proxy.ip = ipParts[0];
+                                    proxy.ipv6 = ipParts[ipParts.length - 1].includes(':') ? ipParts[ipParts.length - 1] : undefined;
+                                } else if (wgIp.includes(':')) {
+                                    proxy.ipv6 = wgIp;
+                                } else {
+                                    proxy.ip = wgIp;
+                                }
+                            }
+                            const allowedIps = params.get('allowed-ips'); if (allowedIps) proxy['allowed-ips'] = allowedIps.split(',');
                             const reserved = params.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
                             const psk = getParam(params, ['presharedKey', 'preshared_key', 'psk']); if (psk) proxy['preshared-key'] = psk;
                             const mtu = params.get('mtu'); if (mtu) proxy.mtu = parseInt(mtu);
-                            const pre = params.get('pre'); if (pre) proxy.pre = pre;
                             const remote_is_scanner = params.get('remote-is-scanner'); if (remote_is_scanner) proxy['remote-is-scanner'] = (remote_is_scanner === 'true');
-                            proxies.push(proxy);
+                            rawProxies.push(proxy);
                         }
                     } catch (e) {
                         console.warn("解析节点失败:", line, e);
                     }
                 }
-                if (proxies.length > 0) {
-                    const hasUnsupported = proxies.some(p => p.type === 'unsupported');
-                    const cleanProxies = proxies.filter(p => p.type !== 'unsupported');
+
+                if (rawProxies.length > 0) {
+                    const hasUnsupported = rawProxies.some(p => p.type === 'unsupported');
+                    const cleanProxies = rawProxies.filter(p => p.type !== 'unsupported');
 
                     let yaml = "";
                     if (cleanProxies.length > 0) {
@@ -910,7 +986,7 @@ const html_content = `<!DOCTYPE html>
 
                     if (hasUnsupported) {
                         let msg = "";
-                        proxies.filter(p => p.type === 'unsupported').forEach(p => {
+                        rawProxies.filter(p => p.type === 'unsupported').forEach(p => {
                             msg += \`# \${getI18nStr('t_unsupported_prefix')} [\${p.name}]: \${p.reason || getI18nStr('t_unsupported_node')}\\n\`;
                         });
                         return msg + (yaml ? "\\n" + yaml : "");
@@ -950,23 +1026,37 @@ const html_content = `<!DOCTYPE html>
                             // 构造新的监听器列表（每个节点分配一个 Socks5 端口）
                             const listeners = [];
                             let currentPort = startPort;
+                            const usedNames = new Set();
+
                             proxies.forEach((proxy) => {
-                                const safeName = \`socks5-\${currentPort}\`;
+                                // 基础合法性检查：节点必须有 name 且 name 不能重复
+                                if (!proxy.name) return;
+
+                                let finalProxyName = proxy.name;
+                                // 如果 YAML 中存在重名，这里再做一次兜底保护
+                                let count = 1;
+                                while (usedNames.has(finalProxyName)) {
+                                    finalProxyName = \`\${proxy.name}_\${count++}\`;
+                                }
+                                usedNames.add(finalProxyName);
+                                proxy.name = finalProxyName;
+
                                 listeners.push({
-                                    name: safeName,
+                                    name: \`socks5-\${currentPort}\`,
                                     type: 'socks',
                                     port: currentPort,
-                                    proxy: proxy.name
+                                    proxy: finalProxyName
                                 });
                                 currentPort++;
                             });
 
-                            // 更新或注入监听器，保持其他信息（如 dns, rules 等）不变
+                            // 更新监听器，极简模式仅保留 proxies 和 listeners
                             doc.listeners = listeners;
 
                             const yamlResult = jsyaml.dump(doc, {
                                 lineWidth: -1,
-                                noRefs: true
+                                noRefs: true,
+                                quotingType: '"'
                             });
 
                             outputStr = (warnings ? warnings + "\\n\\n" : "") + yamlResult;
