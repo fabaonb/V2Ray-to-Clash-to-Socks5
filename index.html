@@ -518,6 +518,17 @@
                     line = line.trim();
                     if (!line || line.startsWith('#')) continue;
                     try {
+                        let proxy = null;
+                        const protocolMatch = line.match(/^([a-z0-9]+):\/\//);
+                        if (protocolMatch) {
+                            const protocol = protocolMatch[1].toLowerCase();
+                            const supported = ['vmess', 'vless', 'trojan', 'hysteria2', 'hy2', 'tuic', 'hysteria', 'socks5', 'http', 'https', 'ss', 'ssr', 'wireguard'];
+                            if (!supported.includes(protocol)) {
+                                proxies.push({ name: `[Clash不支持] ${line.split('#')[1] || protocol}`, type: 'unsupported' });
+                                continue;
+                            }
+                        }
+
                         if (line.startsWith('vmess://')) {
                             const config = JSON.parse(decodeBase64Safe(line.slice(8)));
                             proxy = {
@@ -561,7 +572,14 @@
                             if (type === 'vless') {
                                 proxy.uuid = url.username;
                                 const flow = url.searchParams.get('flow');
-                                if (flow) proxy.flow = flow;
+                                if (flow) {
+                                    if (flow.includes('vision')) {
+                                        proxy.flow = flow;
+                                    } else {
+                                        proxy.type = 'unsupported';
+                                        proxy.name = `${proxy.name} (Clash不支持流控: ${flow})`;
+                                    }
+                                }
                             } else if (type === 'hysteria2') {
                                 proxy.password = url.username;
                                 const obfs = url.searchParams.get('obfs');
@@ -579,6 +597,20 @@
                                 if (cc) proxy['congestion-control'] = cc;
                                 const urm = url.searchParams.get('udp_relay_mode');
                                 if (urm) proxy['udp-relay-mode'] = urm;
+                                const hbi = url.searchParams.get('heartbeat_interval');
+                                if (hbi) proxy['heartbeat-interval'] = parseInt(hbi);
+                                const rrtt = url.searchParams.get('reduce_rtt');
+                                if (rrtt === '1' || rrtt === 'true') proxy['reduce-rtt'] = true;
+                                const rto = url.searchParams.get('request_timeout');
+                                if (rto) proxy['request-timeout'] = parseInt(rto);
+                                const fo = url.searchParams.get('fast_open');
+                                if (fo === '1' || fo === 'true') proxy['fast-open'] = true;
+                                const dsni = url.searchParams.get('disable_sni');
+                                if (dsni === '1' || dsni === 'true') proxy['disable-sni'] = true;
+                                const ip = url.searchParams.get('ip');
+                                if (ip) proxy.ip = ip;
+                                const alpn = url.searchParams.get('alpn');
+                                if (alpn) proxy.alpn = alpn.split(',');
                             } else if (type === 'hysteria') {
                                 if (url.username) proxy.auth_str = url.username;
                                 const up = url.searchParams.get('up'); if (up) proxy.up = up;
@@ -657,7 +689,7 @@
                                 }
                             }
                             if (server && port) {
-                                proxy = { name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password };
+                                proxy = { name: hash || `ss-${server}`, type: 'ss', server: server, port: port, cipher: method, password: password };
                                 const plugin = new URLSearchParams(line.split('?')[1] || '').get('plugin');
                                 if (plugin) {
                                     // 粗略解析 SS 插件，Meta 支持常用插件
@@ -686,7 +718,7 @@
                                 const password = decodeBase64Safe(suffix[0]);
                                 const params = new URLSearchParams(suffix[1] || '');
                                 proxy = {
-                                    name: decodeURIComponent(params.get('remarks') || '') || 'ssr-' + Math.random().toString(36).substr(2, 5),
+                                    name: decodeURIComponent(params.get('remarks') || '') || `ssr-${server}`,
                                     type: 'ssr', server: server, port: port,
                                     password: password, cipher: method,
                                     protocol: protocol, 'protocol-param': decodeURIComponent(params.get('protoparam') || ''),
@@ -696,7 +728,7 @@
                         } else if (line.startsWith('wireguard://')) {
                             const url = new URL(line);
                             proxy = {
-                                name: decodeURIComponent(url.hash.slice(1)) || 'wg-' + Math.random().toString(36).substr(2, 5),
+                                name: decodeURIComponent(url.hash.slice(1)) || `wg-${url.hostname || 'node'}`,
                                 type: 'wireguard', server: url.hostname, port: url.port ? parseInt(url.port) : undefined,
                                 'private-key': url.searchParams.get('privateKey') || '',
                                 'public-key': url.searchParams.get('publicKey') || ''
@@ -713,9 +745,20 @@
                     }
                 }
                 if (proxies.length > 0) {
-                    return jsyaml.dump({
-                        'proxies': proxies
-                    }, { lineWidth: -1 });
+                    const hasUnsupported = proxies.some(p => p.type === 'unsupported');
+                    const cleanProxies = proxies.filter(p => p.type !== 'unsupported');
+
+                    let yaml = "";
+                    if (cleanProxies.length > 0) {
+                        yaml = jsyaml.dump({ 'proxies': cleanProxies }, { lineWidth: -1 });
+                    }
+
+                    if (hasUnsupported) {
+                        return "# ⚠ 部分协议 Clash 不支持，已在下方列出或跳过\n" +
+                            proxies.filter(p => p.type === 'unsupported').map(p => `# Clash不支持: ${p.name}`).join('\n') +
+                            "\n\n" + yaml;
+                    }
+                    return yaml;
                 }
                 return null;
             }
