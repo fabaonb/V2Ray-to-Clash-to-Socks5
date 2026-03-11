@@ -50,11 +50,13 @@
 
 ### 核心功能
 
-- **全协议支持**：支持 VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard 及 HTTP/Socks5 链接解析。
+- **全协议支持**：支持 VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, Snell, Shadow-TLS 及 HTTP/Socks5 链接解析。
+- **协议兼容性检查**：自动识别不支持的流控或协议，并在输出结果中明确标记原因，避免运行错误。
 - **配置保留/补全**：
   - 输入完整 Clash 配置时，保留原有的代理组、路由规则及 DNS 设置，仅注入 Socks5 接口。
   - 输入纯节点列表时，自动补全基础配置。
-- **自动清除注释**：粘贴 Clash 配置时自动过滤所有 YAML 注释，保持输入框清爽。
+- **智能 i18n 系统**：支持中英双语界面一键切换，报错及转换警告信息同步跟随语言环境。
+- **极致体验**：支持示例一键导入、起始端口本地配置记忆（LocalStorage）。
 - **隐私安全**：100% 浏览器内本地执行，不向任何服务器发送节点数据。
 
 ### 关于多平台部署适配
@@ -172,11 +174,13 @@ No server-side dependency — completely eliminates the risk of privacy leaks.
 
 ### Key Features
 
-- **Full Protocol Support**: Supports parsing for VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, and HTTP/Socks5 links.
+- **Full Protocol Support**: Supports parsing for VMess, VLESS (Reality), Trojan, Hysteria 1/2, Tuic v5, Shadowsocks (2022/Plugin), ShadowsocksR, WireGuard, Snell, Shadow-TLS, and HTTP/Socks5 links.
+- **Protocol Compatibility Check**: Automatically identifies unsupported flows or protocols and explicitly marks the reason in the output, preventing runtime errors.
 - **Config Preservation & Completion**:
   - Preserves original proxy groups, routing rules, and DNS settings when a full Clash config is provided.
   - Automatically completes basic settings when only a list of proxies is provided.
-- **Auto-Strip Comments**: Automatically filters out all YAML comments from the Clash input to keep things clean.
+- **Smart i18n System**: One-click toggle between English and Chinese. Error and conversion warning messages automatically follow the chosen language.
+- **Enhanced Experience**: One-click example loading and starting port persistence (LocalStorage).
 - **Privacy-First**: 100% local processing inside your browser. No node data ever leaves your device.
 
 ## Multi-Platform Deployment
@@ -239,7 +243,7 @@ This project includes a built-in GitHub Actions workflow (`.github/workflows/dep
 4. On the next push to the `main` branch, GitHub Actions will automatically build and deploy.
 5. Once deployed, visit `https://<your-username>.github.io/<repo-name>/` to use the tool.
 
-<h2 align="center">Star History</h2>
+<h3 align="center">Star History</h3>
 
 <p align="center">
   <a href="https://star-history.com/#fabaonb/V2Ray-to-Clash-to-Socks5&Date"><img src="https://api.star-history.com/svg?repos=fabaonb/V2Ray-to-Clash-to-Socks5&type=Date" alt="Star History Chart"></a>
