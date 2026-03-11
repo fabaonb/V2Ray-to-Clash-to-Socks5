@@ -48,6 +48,15 @@
 不依赖任何服务端，彻底杜绝隐私泄露风险。
 </p>
 
+### 核心功能
+
+- **全协议支持**：支持 VMess, VLESS, Trojan, Shadowsocks 链接解析。
+- **配置保留/补全**：
+  - 输入完整 Clash 配置时，保留原有的代理组、路由规则及 DNS 设置，仅注入 Socks5 接口。
+  - 输入纯节点列表时，自动补全基础配置。
+- **自动清除注释**：粘贴 Clash 配置时自动过滤所有 YAML 注释，保持输入框清爽。
+- **隐私安全**：100% 浏览器内本地执行，不向任何服务器发送节点数据。
+
 ### 关于多平台部署适配
 
 目前项目已经完全适配主流的 Serverless 和静态托管平台：**GitHub Pages**, **Vercel**, **Cloudflare Pages** 以及 **Cloudflare Workers**。
@@ -160,6 +169,15 @@
 A fully client-side static web tool that converts V2Ray / Clash nodes into Socks5 multi-port proxy configurations.<br>
 No server-side dependency — completely eliminates the risk of privacy leaks.
 </p>
+
+### Key Features
+
+- **Full Protocol Support**: Supports parsing for VMess, VLESS, Trojan, and Shadowsocks links.
+- **Config Preservation & Completion**:
+  - Preserves original proxy groups, routing rules, and DNS settings when a full Clash config is provided.
+  - Automatically completes basic settings when only a list of proxies is provided.
+- **Auto-Strip Comments**: Automatically filters out all YAML comments from the Clash input to keep things clean.
+- **Privacy-First**: 100% local processing inside your browser. No node data ever leaves your device.
 
 ## Multi-Platform Deployment
 
