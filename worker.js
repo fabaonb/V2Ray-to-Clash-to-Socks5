@@ -678,6 +678,21 @@ const html_content = `<!DOCTYPE html>
 
             // 防抖监听输入框变化，将延迟降低到 50ms 达到几乎无缝实时转换
             yamlInput.addEventListener('input', () => {
+                const originalValue = yamlInput.value;
+                // 正则匹配：1. 以#开头的行 2. 空格后的#及其后续内容
+                // 并去除多余的空行
+                const cleanedValue = originalValue
+                    .replace(/(^|\\s)#.*\$/gm, '\$1')
+                    .replace(/\\n\\s*\\n/g, '\\n')
+                    .trimStart();
+
+                if (originalValue !== cleanedValue) {
+                    const start = yamlInput.selectionStart;
+                    yamlInput.value = cleanedValue;
+                    // 只有在非空且还在输入时才尝试恢复光标，简单的赋值会重置光标
+                    try { yamlInput.setSelectionRange(start, start); } catch (e) { }
+                }
+
                 clearTimeout(convertTimeout);
                 convertTimeout = setTimeout(doConvert, 1);
             });
