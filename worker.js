@@ -542,7 +542,7 @@ const html_content = `<!DOCTYPE html>
                                 proxy['grpc-opts'] = { 'grpc-service-name': config.path || '' };
                             }
                             proxies.push(proxy);
-                        } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://')) {
+                        } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://')) {
                             const url = new URL(line);
                             let type = url.protocol.replace(':', '');
                             if (type === 'hy2') type = 'hysteria2';
@@ -564,12 +564,19 @@ const html_content = `<!DOCTYPE html>
                                     proxy.obfs = obfs;
                                     proxy['obfs-password'] = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass') || '';
                                 }
+                            } else if (type === 'tuic') {
+                                proxy.uuid = url.username;
+                                proxy.password = url.password;
+                                const cc = url.searchParams.get('congestion_control');
+                                if (cc) proxy['congestion-control'] = cc;
+                                const urm = url.searchParams.get('udp_relay_mode');
+                                if (urm) proxy['udp-relay-mode'] = urm;
                             } else {
                                 proxy.password = decodeURIComponent(url.username);
                             }
 
                             const security = url.searchParams.get('security');
-                            if (security === 'tls' || security === 'reality' || type === 'hysteria2' || type === 'trojan') {
+                            if (security === 'tls' || security === 'reality' || type === 'hysteria2' || type === 'trojan' || type === 'tuic') {
                                 proxy.tls = true;
                                 if (security === 'reality') {
                                     proxy['reality-opts'] = {
