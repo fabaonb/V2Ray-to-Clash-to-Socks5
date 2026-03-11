@@ -520,15 +520,16 @@ const html_content = `<!DOCTYPE html>
                     if (!line || line.startsWith('#')) continue;
                     try {
                         if (line.startsWith('vmess://')) {
-                            const payload = line.slice(8);
-                            const config = JSON.parse(decodeBase64Safe(payload));
-                            const proxy = {
+                            const config = JSON.parse(decodeBase64Safe(line.slice(8)));
+                            proxy = {
                                 name: config.ps || 'vmess-' + Math.random().toString(36).substr(2, 5),
-                                type: 'vmess', server: config.add, port: parseInt(config.port),
+                                type: 'vmess', server: config.add, port: config.port ? parseInt(config.port) : undefined,
                                 uuid: config.id
                             };
+                            if (proxy.port === undefined) delete proxy.port;
                             if (config.aid !== undefined && config.aid !== "") proxy.alterId = parseInt(config.aid);
                             if (config.scy) proxy.cipher = config.scy;
+
                             if (config.tls === 'tls') {
                                 proxy.tls = true;
                                 if (config.sni) proxy.servername = config.sni;
@@ -548,10 +549,11 @@ const html_content = `<!DOCTYPE html>
                             let type = url.protocol.replace(':', '');
                             if (type === 'hy2') type = 'hysteria2';
 
-                            const proxy = {
+                            proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || \`\${type}-\${Math.random().toString(36).substr(2, 5)}\`,
-                                type: type, server: url.hostname, port: parseInt(url.port) || (['hysteria2', 'tuic', 'hysteria', 'http', 'https'].includes(type) ? 443 : 80)
+                                type: type, server: url.hostname, port: url.port ? parseInt(url.port) : undefined
                             };
+                            if (proxy.port === undefined) delete proxy.port;
 
                             if (type === 'vless') {
                                 proxy.uuid = url.username;
@@ -688,10 +690,11 @@ const html_content = `<!DOCTYPE html>
                             const url = new URL(line);
                             proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || 'wg-' + Math.random().toString(36).substr(2, 5),
-                                type: 'wireguard', server: url.hostname, port: parseInt(url.port) || 51820,
+                                type: 'wireguard', server: url.hostname, port: url.port ? parseInt(url.port) : undefined,
                                 'private-key': url.searchParams.get('privateKey') || '',
                                 'public-key': url.searchParams.get('publicKey') || ''
                             };
+                            if (proxy.port === undefined) delete proxy.port;
                             const wgIp = url.searchParams.get('address'); if (wgIp) proxy.ip = wgIp;
                             const reserved = url.searchParams.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
                             const psk = url.searchParams.get('presharedKey'); if (psk) proxy['preshared-key'] = psk;
@@ -703,53 +706,8 @@ const html_content = `<!DOCTYPE html>
                     }
                 }
                 if (proxies.length > 0) {
-                    const proxyNames = proxies.map(p => p.name);
                     return jsyaml.dump({
-                        'port': 7890,
-                        'socks-port': 7891,
-                        'mixed-port': 7892,
-                        'allow-lan': true,
-                        'mode': 'rule',
-                        'log-level': 'info',
-                        'proxies': proxies,
-                        'proxy-groups': [
-                            {
-                                name: '🚀 节点选择',
-                                type: 'select',
-                                proxies: ['🛰️ 自动选择', 'DIRECT', ...proxyNames]
-                            },
-                            {
-                                name: '🛰️ 自动选择',
-                                type: 'url-test',
-                                url: 'http://www.gstatic.com/generate_204',
-                                interval: 300,
-                                tolerance: 50,
-                                proxies: proxyNames
-                            }
-                        ],
-                        'rules': [
-                            'DOMAIN-WILDCARD,*.google.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.youtube.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.github.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.openai.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.chatgpt.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.anthropic.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.claude.ai,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.googlevideo.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.gstatic.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.googleusercontent.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.ggpht.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.g.co,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.githubusercontent.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.git-scm.com,🚀 节点选择',
-                            'DOMAIN-WILDCARD,*.githubapi.com,🚀 节点选择',
-                            'DOMAIN-SUFFIX,google.com,🚀 节点选择',
-                            'DOMAIN-SUFFIX,github.com,🚀 节点选择',
-                            'DOMAIN-KEYWORD,google,🚀 节点选择',
-                            'DOMAIN-KEYWORD,github,🚀 节点选择',
-                            'GEOIP,CN,DIRECT',
-                            'MATCH,🚀 节点选择'
-                        ]
+                        'proxies': proxies
                     }, { lineWidth: -1 });
                 }
                 return null;
