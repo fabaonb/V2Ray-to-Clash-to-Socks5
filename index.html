@@ -575,7 +575,19 @@
                                 if (config.host) proxy['h2-opts'].host = config.host.split(',');
                             } else if (config.net === 'kcp') {
                                 proxy.network = 'kcp';
-                                proxy['kcp-opts'] = { header: { type: config.type || 'none' } };
+                                proxy['kcp-opts'] = {
+                                    header: { type: config.type || 'none' },
+                                    mtu: config.mtu ? parseInt(config.mtu) : undefined,
+                                    tti: config.tti ? parseInt(config.tti) : undefined,
+                                    'uplink-capacity': config.up ? parseInt(config.up) : undefined,
+                                    'downlink-capacity': config.down ? parseInt(config.down) : undefined,
+                                    congestion: (config.conge === 'true' || config.conge === true),
+                                    'read-buffer-size': config.readBufferSize ? parseInt(config.readBufferSize) : undefined,
+                                    'write-buffer-size': config.writeBufferSize ? parseInt(config.writeBufferSize) : undefined,
+                                    seed: config.seed
+                                };
+                                // 清除 undefined 子项
+                                Object.keys(proxy['kcp-opts']).forEach(k => proxy['kcp-opts'][k] === undefined && delete proxy['kcp-opts'][k]);
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://') || line.startsWith('hysteria://') || line.startsWith('socks5://') || line.startsWith('http://') || line.startsWith('https://')) {
@@ -595,12 +607,12 @@
                                 proxy.uuid = url.username;
                                 const flow = params.get('flow');
                                 if (flow) {
-                                    // Clash Meta 目前仅支持 vision 相关的流控
+                                    // Clash Meta 目前仅支持 vision 相关的流控, 拦截旧版不安全的 XTLS
                                     if (flow.includes('vision')) {
                                         proxy.flow = flow;
                                     } else {
                                         proxy.type = 'unsupported';
-                                        proxy.name = `${proxy.name} (Clash不支持流控: ${flow})`;
+                                        proxy.name = `${proxy.name} (Clash不支持流控/XTLS: ${flow})`;
                                     }
                                 }
                             } else if (type === 'trojan') {
@@ -656,6 +668,16 @@
                                 if (mos) proxy['max-open-streams'] = parseInt(mos);
                                 const mds = getParam(params, ['max-datagram-size', 'max_datagram_size']);
                                 if (mds) proxy['max-datagram-size'] = parseInt(mds);
+
+                                // 补齐 TUIC 端口跳跃参数
+                                const hop = params.get('hop'); if (hop) proxy.hop = hop;
+                                const hi = getParam(params, ['hop-interval', 'hop_interval']);
+                                if (hi) proxy['hop-interval'] = parseInt(hi);
+                                const mport = getParam(params, ['mport', 'ports']);
+                                if (mport && (mport.includes('-') || mport.includes(','))) {
+                                    proxy.ports = mport;
+                                    delete proxy.port;
+                                }
                             } else if (type === 'hysteria') {
                                 if (url.username) proxy.auth_str = url.username;
                                 const up = params.get('up'); if (up) proxy.up = up;
@@ -679,7 +701,7 @@
 
                             // 共通 TLS/Security 解析
                             const security = params.get('security');
-                            const sni = getParam(params, ['sni', 'peer']);
+                            const sniVal = getParam(params, ['sni', 'peer']);
                             if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria', 'socks5'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
                                 proxy.tls = true;
                                 if (security === 'reality') {
@@ -689,7 +711,16 @@
                                     const spx = getParam(params, ['spx', 'spider-x']); if (spx) proxy['reality-opts']['spider-x'] = spx;
                                     if (Object.keys(proxy['reality-opts']).length === 0) delete proxy['reality-opts'];
                                 }
-                                if (sni) proxy.servername = sni;
+
+                                // 根据 Meta 规范分配 TLS 域名键名
+                                if (sniVal) {
+                                    if (['tuic', 'hysteria2', 'hysteria'].includes(type)) {
+                                        proxy.sni = sniVal;
+                                    } else {
+                                        proxy.servername = sniVal;
+                                    }
+                                }
+
                                 const fp = getParam(params, ['fp', 'fingerprint', 'client-fingerprint']);
                                 if (fp) proxy['client-fingerprint'] = fp;
                                 const alpn = params.get('alpn');
@@ -698,22 +729,24 @@
                                 if (insecure === '1' || insecure === 'true') proxy['skip-cert-verify'] = true;
                             }
 
-                            // 共通网络层解析
-                            const network = getParam(params, ['type', 'net', 'network']);
-                            if (network === 'ws') {
-                                proxy.network = 'ws';
-                                proxy['ws-opts'] = {};
-                                const path = params.get('path'); if (path) proxy['ws-opts'].path = path;
-                                const host = params.get('host'); if (host) proxy['ws-opts'].headers = { Host: host };
-                                if (Object.keys(proxy['ws-opts']).length === 0) delete proxy['ws-opts'];
-                            } else if (network === 'grpc') {
-                                proxy.network = 'grpc';
-                                const sn = getParam(params, ['serviceName', 'grpc-service-name']); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
-                            } else if (network === 'h2') {
-                                proxy.network = 'h2';
-                                proxy['h2-opts'] = {};
-                                const path = params.get('path'); if (path) proxy['h2-opts'].path = path;
-                                const host = params.get('host'); if (host) proxy['h2-opts'].host = host.split(',');
+                            // 共通网络层解析 (排除内置 UDP 传输的协议)
+                            if (!['hysteria', 'hysteria2', 'tuic', 'wireguard'].includes(type)) {
+                                const network = getParam(params, ['type', 'net', 'network']);
+                                if (network === 'ws') {
+                                    proxy.network = 'ws';
+                                    proxy['ws-opts'] = {};
+                                    const path = params.get('path'); if (path) proxy['ws-opts'].path = path;
+                                    const host = params.get('host'); if (host) proxy['ws-opts'].headers = { Host: host };
+                                    if (Object.keys(proxy['ws-opts']).length === 0) delete proxy['ws-opts'];
+                                } else if (network === 'grpc') {
+                                    proxy.network = 'grpc';
+                                    const sn = getParam(params, ['serviceName', 'grpc-service-name']); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
+                                } else if (network === 'h2') {
+                                    proxy.network = 'h2';
+                                    proxy['h2-opts'] = {};
+                                    const path = params.get('path'); if (path) proxy['h2-opts'].path = path;
+                                    const host = params.get('host'); if (host) proxy['h2-opts'].host = host.split(',');
+                                }
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('ss://')) {
@@ -814,8 +847,8 @@
                     }
 
                     if (hasUnsupported) {
-                        return "# ⚠ 部分链接无法转换（协议不支持或流控不匹配），已跳过：\n" +
-                            proxies.filter(p => p.type === 'unsupported').map(p => `# 不受支持: ${p.name}`).join('\n') +
+                        return "# ⚠ 部分链接无法转换（Clash不支持或流控不匹配），已跳过：\n" +
+                            proxies.filter(p => p.type === 'unsupported').map(p => `# Clash不支持: ${p.name}`).join('\n') +
                             "\n\n" + yaml;
                     }
                     return yaml;
