@@ -56,7 +56,7 @@
   - 输入完整 Clash 配置时，保留原有的代理组、路由规则及 DNS 设置，仅注入 Socks5 接口。
   - 输入纯节点列表时，自动补全基础配置。
 - **智能 i18n 系统**：支持中英双语界面一键切换，报错及转换警告信息同步跟随语言环境。
-- **极致体验**：支持示例一键导入、起始端口本地配置记忆（LocalStorage）。
+- **极致体验**：起始端口本地配置记忆（LocalStorage）。
 - **隐私安全**：100% 浏览器内本地执行，不向任何服务器发送节点数据。
 
 ### 关于多平台部署适配
@@ -180,7 +180,7 @@ No server-side dependency — completely eliminates the risk of privacy leaks.
   - Preserves original proxy groups, routing rules, and DNS settings when a full Clash config is provided.
   - Automatically completes basic settings when only a list of proxies is provided.
 - **Smart i18n System**: One-click toggle between English and Chinese. Error and conversion warning messages automatically follow the chosen language.
-- **Enhanced Experience**: One-click example loading and starting port persistence (LocalStorage).
+- **Enhanced Experience**: Starting port persistence (LocalStorage).
 - **Privacy-First**: 100% local processing inside your browser. No node data ever leaves your device.
 
 ## Multi-Platform Deployment

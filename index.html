@@ -306,9 +306,7 @@
                         配置链接转 Clash (可选功能)</span>
                 </h2>
                 <div class="input-header" style="display: flex; gap: 0.5rem;">
-                    <button class="action-btn" id="loadExampleBtn">
-                        <i class="fa-solid fa-lightbulb"></i> <span data-i18n="t_load_example">加载示例</span>
-                    </button>
+
                     <button class="action-btn" id="copyV2rayBtn">
                         <i class="fa-solid fa-copy"></i> <span data-i18n="copySourceLink">复制原链接</span>
                     </button>
@@ -406,10 +404,7 @@
             if (yamlInput) yamlInput.placeholder = getI18nStr('clashPlaceholder');
             if (yamlOutput) yamlOutput.placeholder = getI18nStr('outputPlaceholder');
 
-            const loadExampleBtn = document.getElementById('loadExampleBtn');
-            if (loadExampleBtn) {
-                loadExampleBtn.innerHTML = `<i class="fa-solid fa-lightbulb"></i> ${getI18nStr('t_load_example')}`;
-            }
+
 
 
             let convertTimeout;
@@ -450,7 +445,7 @@
                     t_unsupported_flow: 'Clash不支持此流控/XTLS',
                     t_unsupported_node: '当前配置或协议不受支持',
                     t_unsupported_prefix: '🛑 Clash不支持',
-                    t_load_example: '加载示例'
+
                 },
                 'en': {
                     title: '<i class="fa-solid fa-network-wired"></i> V2Ray / Clash to Socks5',
@@ -484,7 +479,7 @@
                     t_unsupported_flow: 'Clash does not support this flow/XTLS',
                     t_unsupported_node: 'Current config or protocol is not supported',
                     t_unsupported_prefix: '🛑 Unsupported by Clash',
-                    t_load_example: 'Load Example'
+
                 }
             };
 
@@ -1103,19 +1098,7 @@
                 showToast(getI18nStr('t_download_start'), 'success');
             });
 
-            loadExampleBtn.addEventListener('click', () => {
-                const examples = [
-                    "vmess://eyJhZGQiOiIxLjEuMS4xIiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6IjY3ZDRiMjA4LWEwYmYtNGNhYi1iZWRjLWNiZGIxMjM0NTY3OCIsIm5ldCI6IndzIiwicGF0aCI6Ii8iLCJwb3J0IjoiNDQzIiwicHMiOiLnpLrkvovTUWVzcy1XUyIsInNjeSI6ImF1dG8iLCJzbmkiOiIiLCJ0bHMiOiJ0bHMiLCJ0eXBlIjoibm9uZSIsInZpbiI6IjIifQ==",
-                    "vless://67d4b208-a0bf-4cab-bedc-cbdb12345678@example.com:443?encryption=none&security=reality&sni=google.com&fp=chrome&pbk=vO4vE_oG8G1jO8XvX9XvX9XvX9XvX9XvX9XvX9XvX9A&sid=6ba912&type=grpc#示例-Reality-gRPC",
-                    "tuic://67d4b208-a0bf-4cab-bedc-cbdb12345678:password@tuic.example.com:443?congestion_control=bbr&alpn=h3&sni=tuic.example.com#示例-TUIC-v5",
-                    "hysteria2://password@hy2.example.com:443?sni=hy2.example.com&obfs=emerald&obfs-password=p123#示例-Hysteria2",
-                    "snell://psk123456@snell.example.com:443?version=4#示例-Snell-v4",
-                    "custom-proto://node-info#这个协议Clash不支持"
-                ];
-                v2rayInput.value = examples.join('\n');
-                v2rayInput.dispatchEvent(new Event('input'));
-                showToast(getI18nStr('t_parse_v2ray_success'), 'success');
-            });
+
 
             // 初始化起始端口设置 (LocalStorage持久化)
             const savedPort = localStorage.getItem('socks5_start_port');

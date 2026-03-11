@@ -306,9 +306,12 @@ const html_content = `<!DOCTYPE html>
                     <i class="fa-solid fa-link" style="color: #a78bfa;"></i> <span data-i18n="v2rayHeader">1. V2RayN
                         配置链接转 Clash (可选功能)</span>
                 </h2>
-                <button class="action-btn" id="copyV2rayBtn">
-                    <i class="fa-solid fa-copy"></i> <span data-i18n="copySourceLink">复制原链接</span>
-                </button>
+                <div class="input-header" style="display: flex; gap: 0.5rem;">
+
+                    <button class="action-btn" id="copyV2rayBtn">
+                        <i class="fa-solid fa-copy"></i> <span data-i18n="copySourceLink">复制原链接</span>
+                    </button>
+                </div>
             </div>
             <div class="form-group flex-fill" style="flex: 0.3; min-height: 80px; margin-bottom: 0.5rem;">
                 <textarea id="v2rayInput" data-i18n-placeholder="v2rayPlaceholder"
@@ -385,16 +388,25 @@ const html_content = `<!DOCTYPE html>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // 获取 DOM 元素
             const v2rayInput = document.getElementById('v2rayInput');
             const yamlInput = document.getElementById('yamlInput');
             const startPortInput = document.getElementById('startPort');
             const yamlOutput = document.getElementById('yamlOutput');
-            const copyBtn = document.getElementById('copyBtn');
-            const clearBtn = document.getElementById('clearBtn');
+            const copyResultBtn = document.getElementById('copyBtn'); // Renamed from copyBtn
+            const clearAllBtn = document.getElementById('clearBtn'); // Renamed from clearBtn
             const copyInputBtn = document.getElementById('copyInputBtn');
             const downloadInputBtn = document.getElementById('downloadInputBtn');
             const copyV2rayBtn = document.getElementById('copyV2rayBtn');
             const downloadBtn = document.getElementById('downloadBtn');
+
+            // 更新占位符和特殊硬编码元素
+            if (v2rayInput) v2rayInput.placeholder = getI18nStr('v2rayPlaceholder');
+            if (yamlInput) yamlInput.placeholder = getI18nStr('clashPlaceholder');
+            if (yamlOutput) yamlOutput.placeholder = getI18nStr('outputPlaceholder');
+
+
+
 
             let convertTimeout;
             let v2rayTimeout;
@@ -428,7 +440,13 @@ const html_content = `<!DOCTYPE html>
                     t_copied_v2ray: '已复制V2Ray链接到剪贴板！',
                     t_err_result_empty: '还没有转换结果可操作',
                     t_copied_result: '已复制到剪贴板！',
-                    t_download_start: '已成功开始下载配置！'
+                    t_download_start: '已成功开始下载配置！',
+                    t_unsupported_protocol: 'Clash原生不支持此协议',
+                    t_invalid_vmess: 'VMess JSON解析失败',
+                    t_unsupported_flow: 'Clash不支持此流控/XTLS',
+                    t_unsupported_node: '当前配置或协议不受支持',
+                    t_unsupported_prefix: '🛑 Clash不支持',
+
                 },
                 'en': {
                     title: '<i class="fa-solid fa-network-wired"></i> V2Ray / Clash to Socks5',
@@ -456,7 +474,13 @@ const html_content = `<!DOCTYPE html>
                     t_copied_v2ray: 'V2Ray source link copied to clipboard!',
                     t_err_result_empty: 'No generated result available yet.',
                     t_copied_result: 'Result config copied to clipboard!',
-                    t_download_start: 'Configuration download started successfully!'
+                    t_download_start: 'Configuration download started successfully!',
+                    t_unsupported_protocol: 'Clash does not natively support this protocol',
+                    t_invalid_vmess: 'VMess JSON parsing failed',
+                    t_unsupported_flow: 'Clash does not support this flow/XTLS',
+                    t_unsupported_node: 'Current config or protocol is not supported',
+                    t_unsupported_prefix: '🛑 Unsupported by Clash',
+
                 }
             };
 
@@ -515,113 +539,219 @@ const html_content = `<!DOCTYPE html>
                 }
                 const lines = text.split('\\n');
                 const proxies = [];
+
+                // 辅助函数：从 URLSearchParams 中获取参数，支持多种别名
+                const getParam = (params, keys) => {
+                    for (const key of keys) {
+                        const val = params.get(key);
+                        if (val !== null && val !== undefined) return val;
+                    }
+                    return null;
+                };
+
                 for (let line of lines) {
                     line = line.trim();
                     if (!line || line.startsWith('#')) continue;
                     try {
                         let proxy = null;
                         const protocolMatch = line.match(/^([a-z0-9]+):\\/\\//);
-                        if (protocolMatch) {
-                            const protocol = protocolMatch[1].toLowerCase();
-                            const supported = ['vmess', 'vless', 'trojan', 'hysteria2', 'hy2', 'tuic', 'hysteria', 'socks5', 'http', 'https', 'ss', 'ssr', 'wireguard'];
-                            if (!supported.includes(protocol)) {
-                                proxies.push({ name: \`[Clash不支持] \${line.split('#')[1] || protocol}\`, type: 'unsupported' });
-                                continue;
-                            }
+                        if (!protocolMatch) continue;
+
+                        const protocol = protocolMatch[1].toLowerCase();
+                        // 严格白名单：必须是 Clash Meta 原生支持的协议
+                        const supported = ['vmess', 'vless', 'trojan', 'hysteria2', 'hy2', 'tuic', 'hysteria', 'socks5', 'socks', 'http', 'https', 'ss', 'ssr', 'wireguard', 'snell', 'shadow-tls'];
+
+                        if (!supported.includes(protocol)) {
+                            proxies.push({
+                                name: decodeURIComponent(line.split('#')[1] || protocol),
+                                type: 'unsupported',
+                                reason: getI18nStr('t_unsupported_protocol')
+                            });
+                            continue;
                         }
 
                         if (line.startsWith('vmess://')) {
-                            const config = JSON.parse(decodeBase64Safe(line.slice(8)));
+                            let configStr = line.slice(8);
+                            if (configStr.includes('#')) configStr = configStr.split('#')[0];
+                            let config;
+                            try {
+                                config = JSON.parse(decodeBase64Safe(configStr));
+                            } catch (e) {
+                                proxies.push({ name: 'Invalid VMess', type: 'unsupported', reason: getI18nStr('t_invalid_vmess') });
+                                continue;
+                            }
+
                             proxy = {
                                 name: config.ps || \`vmess-\${config.add || 'node'}\`,
-                                type: 'vmess', server: config.add, port: config.port ? parseInt(config.port) : undefined,
-                                uuid: config.id
+                                type: 'vmess',
+                                server: config.add,
+                                port: config.port ? parseInt(config.port) : 443,
+                                uuid: config.id,
+                                alterId: (config.aid !== undefined && config.aid !== "") ? parseInt(config.aid) : 0,
+                                cipher: config.scy || 'auto',
+                                udp: true
                             };
-                            if (proxy.port === undefined) delete proxy.port;
-                            if (config.aid !== undefined && config.aid !== "") proxy.alterId = parseInt(config.aid);
-                            if (config.scy) proxy.cipher = config.scy;
 
                             if (config.tls === 'tls') {
                                 proxy.tls = true;
                                 if (config.sni) proxy.servername = config.sni;
                                 if (config.alpn) proxy.alpn = config.alpn.split(',');
-                                if (config.allowInsecure === 'true' || config.allowInsecure === true) proxy['skip-cert-verify'] = true;
+                                if (config.allowInsecure || config.allowInsecure === 'true') proxy['skip-cert-verify'] = true;
+                                if (config.fp) proxy['client-fingerprint'] = config.fp;
                             }
+
                             if (config.net === 'ws') {
                                 proxy.network = 'ws';
-                                proxy['ws-opts'] = {};
-                                if (config.path) proxy['ws-opts'].path = config.path;
-                                if (config.host) proxy['ws-opts'].headers = { Host: config.host };
-                                if (Object.keys(proxy['ws-opts']).length === 0) delete proxy['ws-opts'];
+                                proxy['ws-opts'] = {
+                                    path: config.path || '/',
+                                    headers: config.host ? { Host: config.host } : undefined
+                                };
+                                if (!proxy['ws-opts'].headers) delete proxy['ws-opts'].headers;
                             } else if (config.net === 'grpc') {
                                 proxy.network = 'grpc';
-                                if (config.path) proxy['grpc-opts'] = { 'grpc-service-name': config.path };
+                                proxy['grpc-opts'] = {
+                                    'grpc-service-name': config.path || 'GunService'
+                                };
+                            } else if (config.net === 'h2') {
+                                proxy.network = 'h2';
+                                proxy['h2-opts'] = {
+                                    path: config.path || '/',
+                                    host: config.host ? config.host.split(',') : undefined
+                                };
+                            } else if (config.net === 'kcp') {
+                                proxy.network = 'kcp';
+                                proxy['kcp-opts'] = {
+                                    header: { type: config.type || 'none' },
+                                    seed: config.seed
+                                };
                             }
+
+                            // 预备所有可能参数
+                            if (config.packetEncoding) proxy['packet-encoding'] = config.packetEncoding;
+                            if (config.globalPadding === 'true') proxy['global-padding'] = true;
+                            if (config.authenticatedLength === 'true') proxy['authenticated-length'] = true;
+
                             proxies.push(proxy);
-                        } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://') || line.startsWith('hysteria://') || line.startsWith('socks5://') || line.startsWith('http://') || line.startsWith('https://')) {
+                        } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://') || line.startsWith('tuic://') || line.startsWith('hysteria://') || line.startsWith('socks5://') || line.startsWith('socks://') || line.startsWith('http://') || line.startsWith('https://') || line.startsWith('snell://') || line.startsWith('shadow-tls://')) {
                             const url = new URL(line);
                             let type = url.protocol.replace(':', '');
                             if (type === 'hy2') type = 'hysteria2';
                             if (type === 'https') type = 'http';
+                            if (type === 'socks') type = 'socks5';
+                            const params = url.searchParams;
 
                             proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || \`\${type}-\${url.hostname || 'node'}\`,
-                                type: type, server: url.hostname, port: url.port ? parseInt(url.port) : undefined
+                                type: type,
+                                server: url.hostname,
+                                port: url.port ? parseInt(url.port) : 443,
+                                udp: true
                             };
-                            if (proxy.port === undefined) delete proxy.port;
 
                             if (type === 'vless') {
                                 proxy.uuid = url.username;
-                                const flow = url.searchParams.get('flow');
+                                const flow = params.get('flow');
                                 if (flow) {
                                     if (flow.includes('vision')) {
                                         proxy.flow = flow;
                                     } else {
-                                        proxy.type = 'unsupported';
-                                        proxy.name = \`\${proxy.name} (Clash不支持流控: \${flow})\`;
+                                        proxies.push({
+                                            name: proxy.name,
+                                            type: 'unsupported',
+                                            reason: \`\${getI18nStr('t_unsupported_flow')}: \${flow}\`
+                                        });
+                                        continue;
                                     }
                                 }
+                                const pe = params.get('packet-encoding') || params.get('packetEncoding');
+                                if (pe) proxy['packet-encoding'] = pe;
+                            } else if (type === 'trojan') {
+                                proxy.password = url.username;
+                            } else if (type === 'snell') {
+                                proxy.psk = url.username;
+                                const version = params.get('version'); if (version) proxy.version = version;
+                            } else if (type === 'shadow-tls') {
+                                proxy.password = url.username;
+                                const version = params.get('version'); if (version) proxy.version = parseInt(version);
+                                const host = params.get('host'); if (host) proxy.host = host;
                             } else if (type === 'hysteria2') {
                                 proxy.password = url.username;
-                                const obfs = url.searchParams.get('obfs');
-                                if (obfs) {
+                                const obfs = params.get('obfs');
+                                if (obfs && obfs !== 'none') {
                                     proxy.obfs = obfs;
-                                    const op = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass');
+                                    const op = getParam(params, ['obfs-password', 'obfs_password', 'obfs-pass', 'obfs_pass']);
                                     if (op) proxy['obfs-password'] = op;
                                 }
-                                const mport = url.searchParams.get('mport');
-                                if (mport) proxy.port = mport;
+                                const up = getParam(params, ['up', 'upload']); if (up) proxy.up = up;
+                                const down = getParam(params, ['down', 'download']); if (down) proxy.down = down;
+
+                                const mport = getParam(params, ['mport', 'ports']);
+                                if (mport) {
+                                    if (mport.includes('-') || mport.includes(',')) {
+                                        proxy.ports = mport;
+                                        delete proxy.port;
+                                    } else {
+                                        proxy.port = parseInt(mport);
+                                    }
+                                }
+                                const hi = getParam(params, ['hop-interval', 'hop_interval']);
+                                if (hi) proxy['hop-interval'] = parseInt(hi);
+                                const sni = getParam(params, ['sni', 'peer']);
+                                if (sni) proxy.sni = sni;
                             } else if (type === 'tuic') {
                                 if (url.username) proxy.uuid = url.username;
                                 if (url.password) proxy.password = url.password;
-                                const cc = url.searchParams.get('congestion_control');
-                                if (cc) proxy['congestion-control'] = cc;
-                                const urm = url.searchParams.get('udp_relay_mode');
+                                const token = params.get('token'); if (token) proxy.token = token;
+
+                                const cc = getParam(params, ['congestion-controller', 'congestion_control', 'cc']);
+                                if (cc) proxy['congestion-controller'] = cc;
+                                const urm = getParam(params, ['udp-relay-mode', 'udp_relay_mode', 'urm']);
                                 if (urm) proxy['udp-relay-mode'] = urm;
-                                const hbi = url.searchParams.get('heartbeat_interval');
+                                const hbi = getParam(params, ['heartbeat-interval', 'heartbeat_interval', 'hbi']);
                                 if (hbi) proxy['heartbeat-interval'] = parseInt(hbi);
-                                const rrtt = url.searchParams.get('reduce_rtt');
+                                const rrtt = getParam(params, ['reduce-rtt', 'reduce_rtt']);
                                 if (rrtt === '1' || rrtt === 'true') proxy['reduce-rtt'] = true;
-                                const rto = url.searchParams.get('request_timeout');
+                                const rto = getParam(params, ['request-timeout', 'request_timeout']);
                                 if (rto) proxy['request-timeout'] = parseInt(rto);
-                                const fo = url.searchParams.get('fast_open');
+                                const fo = getParam(params, ['fast-open', 'fast_open']);
                                 if (fo === '1' || fo === 'true') proxy['fast-open'] = true;
-                                const dsni = url.searchParams.get('disable_sni');
+                                const dsni = getParam(params, ['disable-sni', 'disable_sni']);
                                 if (dsni === '1' || dsni === 'true') proxy['disable-sni'] = true;
-                                const ip = url.searchParams.get('ip');
-                                if (ip) proxy.ip = ip;
-                                const alpn = url.searchParams.get('alpn');
-                                if (alpn) proxy.alpn = alpn.split(',');
-                            } else if (type === 'hysteria') {
-                                if (url.username) proxy.auth_str = url.username;
-                                const up = url.searchParams.get('up'); if (up) proxy.up = up;
-                                const down = url.searchParams.get('down'); if (down) proxy.down = down;
-                                const alpn = url.searchParams.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
-                                const mport = url.searchParams.get('mport');
-                                if (mport) {
-                                    proxy.port = mport;
-                                    proxy.protocol = 'mports';
+                                const ip = params.get('ip'); if (ip) proxy.ip = ip;
+                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
+                                const mudps = getParam(params, ['max-udp-relay-packet-size', 'max_udp_relay_packet_size', 'mudps']);
+                                if (mudps) proxy['max-udp-relay-packet-size'] = parseInt(mudps);
+                                const mos = getParam(params, ['max-open-streams', 'max_open_streams', 'mos']);
+                                if (mos) proxy['max-open-streams'] = parseInt(mos);
+                                const mds = getParam(params, ['max-datagram-size', 'max_datagram_size']);
+                                if (mds) proxy['max-datagram-size'] = parseInt(mds);
+
+                                // 端口跳跃
+                                const hop = params.get('hop'); if (hop) proxy.hop = hop;
+                                const hi = getParam(params, ['hop-interval', 'hop_interval']);
+                                if (hi) proxy['hop-interval'] = parseInt(hi);
+                                const mport = getParam(params, ['mport', 'ports']);
+                                if (mport && (mport.includes('-') || mport.includes(','))) {
+                                    proxy.ports = mport;
+                                    delete proxy.port;
                                 }
+                            } else if (type === 'hysteria') {
+                                if (url.username) proxy['auth-str'] = url.username;
+                                const up = params.get('up'); if (up) proxy.up = up;
+                                const down = params.get('down'); if (down) proxy.down = down;
+                                const alpn = params.get('alpn'); if (alpn) proxy.alpn = alpn.split(',');
+                                const mport = params.get('mport');
+                                if (mport) {
+                                    if (mport.includes('-') || mport.includes(',')) {
+                                        proxy.ports = mport;
+                                        delete proxy.port;
+                                    } else {
+                                        proxy.port = parseInt(mport);
+                                    }
+                                }
+                                const fo = getParam(params, ['fast-open', 'fast_open']);
+                                if (fo === '1' || fo === 'true') proxy['fast-open'] = true;
+                                const hop = params.get('hop'); if (hop) proxy.hop = hop;
                             } else if (type === 'http' || type === 'socks5') {
                                 if (url.username) proxy.username = url.username;
                                 if (url.password) proxy.password = url.password;
@@ -630,34 +760,55 @@ const html_content = `<!DOCTYPE html>
                                 if (url.username) proxy.password = decodeURIComponent(url.username);
                             }
 
-                            const security = url.searchParams.get('security');
-                            const sni = url.searchParams.get('sni') || url.searchParams.get('peer');
-                            if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
+                            // 共通 TLS/Security 解析
+                            const security = params.get('security');
+                            const sniVal = getParam(params, ['sni', 'peer']);
+                            if (security === 'tls' || security === 'reality' || ['hysteria2', 'trojan', 'tuic', 'hysteria', 'socks5', 'snell', 'shadow-tls'].includes(type) || (type === 'http' && url.protocol === 'https:')) {
                                 proxy.tls = true;
                                 if (security === 'reality') {
                                     proxy['reality-opts'] = {};
-                                    const pbk = url.searchParams.get('pbk'); if (pbk) proxy['reality-opts']['public-key'] = pbk;
-                                    const sid = url.searchParams.get('sid'); if (sid) proxy['reality-opts']['short-id'] = sid;
+                                    const pbk = getParam(params, ['pbk', 'public-key']); if (pbk) proxy['reality-opts']['public-key'] = pbk;
+                                    const sid = getParam(params, ['sid', 'short-id']); if (sid) proxy['reality-opts']['short-id'] = sid;
+                                    const spx = getParam(params, ['spx', 'spider-x']); if (spx) proxy['reality-opts']['spider-x'] = spx;
                                     if (Object.keys(proxy['reality-opts']).length === 0) delete proxy['reality-opts'];
                                 }
-                                if (sni) proxy.servername = sni;
-                                const fp = url.searchParams.get('fp');
+
+                                if (sniVal) {
+                                    if (['tuic', 'hysteria2', 'hysteria', 'snell', 'shadow-tls'].includes(type)) {
+                                        proxy.sni = sniVal;
+                                    } else {
+                                        proxy.servername = sniVal;
+                                    }
+                                }
+
+                                const fp = getParam(params, ['fp', 'fingerprint', 'client-fingerprint', 'browser']);
                                 if (fp) proxy['client-fingerprint'] = fp;
-                                const alpn = url.searchParams.get('alpn');
+                                const alpn = params.get('alpn');
                                 if (alpn && !proxy.alpn) proxy.alpn = alpn.split(',');
-                                if (url.searchParams.get('insecure') === '1' || url.searchParams.get('allowInsecure') === '1') proxy['skip-cert-verify'] = true;
+                                const insecure = getParam(params, ['insecure', 'allowInsecure', 'skip-cert-verify']);
+                                if (insecure === '1' || insecure === 'true') proxy['skip-cert-verify'] = true;
                             }
 
-                            const network = url.searchParams.get('type');
-                            if (network === 'ws') {
-                                proxy.network = 'ws';
-                                proxy['ws-opts'] = {};
-                                const path = url.searchParams.get('path'); if (path) proxy['ws-opts'].path = path;
-                                const host = url.searchParams.get('host'); if (host) proxy['ws-opts'].headers = { Host: host };
-                                if (Object.keys(proxy['ws-opts']).length === 0) delete proxy['ws-opts'];
-                            } else if (network === 'grpc') {
-                                proxy.network = 'grpc';
-                                const sn = url.searchParams.get('serviceName'); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
+                            // 共通网络层解析
+                            if (!['hysteria', 'hysteria2', 'tuic', 'wireguard', 'snell', 'shadow-tls'].includes(type)) {
+                                const network = getParam(params, ['type', 'net', 'network']);
+                                if (network === 'ws') {
+                                    proxy.network = 'ws';
+                                    proxy['ws-opts'] = {
+                                        path: params.get('path') || '/',
+                                        headers: params.get('host') ? { Host: params.get('host') } : undefined
+                                    };
+                                    if (!proxy['ws-opts'].headers) delete proxy['ws-opts'].headers;
+                                } else if (network === 'grpc') {
+                                    proxy.network = 'grpc';
+                                    const sn = getParam(params, ['serviceName', 'grpc-service-name']); if (sn) proxy['grpc-opts'] = { 'grpc-service-name': sn };
+                                } else if (network === 'h2') {
+                                    proxy.network = 'h2';
+                                    proxy['h2-opts'] = {
+                                        path: params.get('path') || '/',
+                                        host: params.get('host') ? params.get('host').split(',') : undefined
+                                    };
+                                }
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('ss://')) {
@@ -665,7 +816,6 @@ const html_content = `<!DOCTYPE html>
                             if (main.includes('#')) { const parts = main.split('#'); hash = decodeURIComponent(parts[1]); main = parts[0]; }
                             let method = '', password = '', server = '', port = '';
 
-                            // Handling SIP002 format: ss://BASE64(method:password)@server:port
                             if (main.includes('@')) {
                                 const parts = main.split('@');
                                 const credentials = decodeBase64Safe(parts[0]);
@@ -680,7 +830,6 @@ const html_content = `<!DOCTYPE html>
                                 }
                             } else {
                                 const decoded = decodeBase64Safe(main);
-                                // Handles legacy format or others
                                 const parts = decoded.split('@');
                                 if (parts.length === 2) {
                                     const cParts = parts[0].split(':');
@@ -690,10 +839,10 @@ const html_content = `<!DOCTYPE html>
                                 }
                             }
                             if (server && port) {
-                                proxy = { name: hash || \`ss-\${server}\`, type: 'ss', server: server, port: port, cipher: method, password: password };
-                                const plugin = new URLSearchParams(line.split('?')[1] || '').get('plugin');
+                                proxy = { name: hash || \`ss-\${server}\`, type: 'ss', server: server, port: port, cipher: method, password: password, udp: true };
+                                const urlObj = new URL(line);
+                                const plugin = urlObj.searchParams.get('plugin');
                                 if (plugin) {
-                                    // 粗略解析 SS 插件，Meta 支持常用插件
                                     const pParts = decodeURIComponent(plugin).split(';');
                                     proxy.plugin = pParts[0];
                                     if (pParts.length > 1) {
@@ -723,22 +872,27 @@ const html_content = `<!DOCTYPE html>
                                     type: 'ssr', server: server, port: port,
                                     password: password, cipher: method,
                                     protocol: protocol, 'protocol-param': decodeURIComponent(params.get('protoparam') || ''),
-                                    obfs: obfs, 'obfs-param': decodeURIComponent(params.get('obfsparam') || '')
+                                    obfs: obfs, 'obfs-param': decodeURIComponent(params.get('obfsparam') || ''),
+                                    udp: true
                                 };
+                                proxies.push(proxy);
                             }
                         } else if (line.startsWith('wireguard://')) {
                             const url = new URL(line);
+                            const params = url.searchParams;
                             proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || \`wg-\${url.hostname || 'node'}\`,
-                                type: 'wireguard', server: url.hostname, port: url.port ? parseInt(url.port) : undefined,
-                                'private-key': url.searchParams.get('privateKey') || '',
-                                'public-key': url.searchParams.get('publicKey') || ''
+                                type: 'wireguard', server: url.hostname, port: url.port ? parseInt(url.port) : 51820,
+                                'private-key': getParam(params, ['privateKey', 'private_key']) || '',
+                                'public-key': getParam(params, ['publicKey', 'public_key']) || '',
+                                udp: true
                             };
-                            if (proxy.port === undefined) delete proxy.port;
-                            const wgIp = url.searchParams.get('address'); if (wgIp) proxy.ip = wgIp;
-                            const reserved = url.searchParams.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
-                            const psk = url.searchParams.get('presharedKey'); if (psk) proxy['preshared-key'] = psk;
-                            const mtu = url.searchParams.get('mtu'); if (mtu) proxy.mtu = parseInt(mtu);
+                            const wgIp = getParam(params, ['address', 'ip']); if (wgIp) proxy.ip = wgIp;
+                            const reserved = params.get('reserved'); if (reserved) proxy.reserved = reserved.split(',').map(Number);
+                            const psk = getParam(params, ['presharedKey', 'preshared_key', 'psk']); if (psk) proxy['preshared-key'] = psk;
+                            const mtu = params.get('mtu'); if (mtu) proxy.mtu = parseInt(mtu);
+                            const pre = params.get('pre'); if (pre) proxy.pre = pre;
+                            const remote_is_scanner = params.get('remote-is-scanner'); if (remote_is_scanner) proxy['remote-is-scanner'] = (remote_is_scanner === 'true');
                             proxies.push(proxy);
                         }
                     } catch (e) {
@@ -751,13 +905,15 @@ const html_content = `<!DOCTYPE html>
 
                     let yaml = "";
                     if (cleanProxies.length > 0) {
-                        yaml = jsyaml.dump({ 'proxies': cleanProxies }, { lineWidth: -1 });
+                        yaml = jsyaml.dump({ 'proxies': cleanProxies }, { lineWidth: -1, noRefs: true });
                     }
 
                     if (hasUnsupported) {
-                        return "# ⚠ 部分协议 Clash 不支持，已在下方列出或跳过\\n" +
-                            proxies.filter(p => p.type === 'unsupported').map(p => \`# Clash不支持: \${p.name}\`).join('\\n') +
-                            "\\n\\n" + yaml;
+                        let msg = "";
+                        proxies.filter(p => p.type === 'unsupported').forEach(p => {
+                            msg += \`# \${getI18nStr('t_unsupported_prefix')} [\${p.name}]: \${p.reason || getI18nStr('t_unsupported_node')}\\n\`;
+                        });
+                        return msg + (yaml ? "\\n" + yaml : "");
                     }
                     return yaml;
                 }
@@ -773,12 +929,12 @@ const html_content = `<!DOCTYPE html>
                 let outputStr = '';
 
                 if (inputStr) {
-                    try {
-                        // 预处理：删除所有 YAML 注释
-                        // 正则逻辑：匹配行首或空格后的 # 及其后续所有字符，直到行尾
-                        // 注意：这会过滤掉大部分注释，且 js-yaml 本身加载后 dump 也不带注释
-                        const cleanInput = inputStr.replace(/(^|[ \\t])#.*\$/gm, '\$1');
+                    // 提取所有警告行 (# 🛑 开头)
+                    const warnings = inputStr.split('\\n').filter(line => line.trim().startsWith('# 🛑')).join('\\n');
 
+                    try {
+                        // 预处理：删除所有 YAML 注释以便解析
+                        const cleanInput = inputStr.replace(/(^|[ \\t])#.*\$/gm, '\$1');
                         let doc = jsyaml.load(cleanInput);
 
                         // 如果输入是数组，则认为它只是节点列表，包装成对象
@@ -808,14 +964,23 @@ const html_content = `<!DOCTYPE html>
                             // 更新或注入监听器，保持其他信息（如 dns, rules 等）不变
                             doc.listeners = listeners;
 
-                            outputStr = jsyaml.dump(doc, {
+                            const yamlResult = jsyaml.dump(doc, {
                                 lineWidth: -1,
                                 noRefs: true
                             });
+
+                            outputStr = (warnings ? warnings + "\\n\\n" : "") + yamlResult;
                             parseSuccess = true;
+                        } else if (warnings) {
+                            // 即使没有解析出 proxies，如果有警告也要显示
+                            outputStr = warnings;
+                            parseSuccess = true; // 标记为 true 以便显示复制/下载按钮
                         }
                     } catch (e) {
-                        // 静默处理解析异常
+                        if (warnings) {
+                            outputStr = warnings;
+                            parseSuccess = true;
+                        }
                     }
                 }
 
@@ -851,9 +1016,9 @@ const html_content = `<!DOCTYPE html>
 
             // 防抖监听输入框变化，将延迟降低到 50ms 达到几乎无缝实时转换
             yamlInput.addEventListener('input', () => {
+                // 不再自动实时清理注释，避免 parseV2rayNConfig 生成的警告消失
+                /*
                 const originalValue = yamlInput.value;
-                // 正则匹配：1. 以#开头的行 2. 空格后的#及其后续内容
-                // 并去除多余的空行
                 const cleanedValue = originalValue
                     .replace(/(^|\\s)#.*\$/gm, '\$1')
                     .replace(/\\n\\s*\\n/g, '\\n')
@@ -862,9 +1027,9 @@ const html_content = `<!DOCTYPE html>
                 if (originalValue !== cleanedValue) {
                     const start = yamlInput.selectionStart;
                     yamlInput.value = cleanedValue;
-                    // 只有在非空且还在输入时才尝试恢复光标，简单的赋值会重置光标
                     try { yamlInput.setSelectionRange(start, start); } catch (e) { }
                 }
+                */
 
                 clearTimeout(convertTimeout);
                 convertTimeout = setTimeout(doConvert, 1);
@@ -932,6 +1097,17 @@ const html_content = `<!DOCTYPE html>
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 showToast(getI18nStr('t_download_start'), 'success');
+            });
+
+
+
+            // 初始化起始端口设置 (LocalStorage持久化)
+            const savedPort = localStorage.getItem('socks5_start_port');
+            if (savedPort) startPortInput.value = savedPort;
+
+            startPortInput.addEventListener('change', () => {
+                localStorage.setItem('socks5_start_port', startPortInput.value);
+                doConvert();
             });
 
             copyV2rayBtn.addEventListener('click', () => {
