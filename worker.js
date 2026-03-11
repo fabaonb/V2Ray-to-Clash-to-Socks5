@@ -575,7 +575,17 @@ const html_content = `<!DOCTYPE html>
                         console.warn("解析节点失败:", line, e);
                     }
                 }
-                if (proxies.length > 0) return jsyaml.dump({ proxies: proxies });
+                if (proxies.length > 0) {
+                    return jsyaml.dump({
+                        'port': 7890,
+                        'socks-port': 7891,
+                        'mixed-port': 7892,
+                        'allow-lan': true,
+                        'mode': 'rule',
+                        'log-level': 'info',
+                        'proxies': proxies
+                    }, { lineWidth: -1 });
+                }
                 return null;
             }
             // ====================== 解析库结束 =======================
