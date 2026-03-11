@@ -322,9 +322,14 @@
                     <i class="fa-solid fa-file-import" style="color: var(--primary);"></i> <span
                         data-i18n="clashHeader">2. Clash 配置源 (默认可直接从这步开始)</span>
                 </h2>
-                <button class="action-btn" id="copyInputBtn">
-                    <i class="fa-solid fa-copy"></i> <span data-i18n="copySourceConfig">复制原配置</span>
-                </button>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="action-btn" id="downloadInputBtn">
+                        <i class="fa-solid fa-download"></i> <span data-i18n="downloadSourceBtn">下载原配置</span>
+                    </button>
+                    <button class="action-btn" id="copyInputBtn">
+                        <i class="fa-solid fa-copy"></i> <span data-i18n="copySourceConfig">复制原配置</span>
+                    </button>
+                </div>
             </div>
 
             <div class="form-group flex-fill">
@@ -386,6 +391,7 @@
             const copyBtn = document.getElementById('copyBtn');
             const clearBtn = document.getElementById('clearBtn');
             const copyInputBtn = document.getElementById('copyInputBtn');
+            const downloadInputBtn = document.getElementById('downloadInputBtn');
             const copyV2rayBtn = document.getElementById('copyV2rayBtn');
             const downloadBtn = document.getElementById('downloadBtn');
 
@@ -404,6 +410,7 @@
                     v2rayPlaceholder: '如您只有 V2RayN 配置链接或Base64：请粘贴在这里！(支持所有主流协议，不支持变种协议，不支持机场订阅链接)，系统将为您自动解析并填充至下框...',
                     clashHeader: '2. Clash 配置源 (默认可直接从这步开始)',
                     copySourceConfig: '复制原配置',
+                    downloadSourceBtn: '下载原配置',
                     clashPlaceholder: '在此处粘贴完整的 Clash 配置文件或节点列表数组\n如果是完整配置，系统将保留原有的规则、分组等信息并注入 Socks5 监听器；\n如果仅粘贴节点列表，系统将为您自动补全基础配置...',
                     startPortLabel: 'Socks5 起始分配端口',
                     clearAllBtn: '一键清空所有配置',
@@ -431,6 +438,7 @@
                     v2rayPlaceholder: 'Paste your raw V2Ray link or Base64 here (Supports vmess/vless/ss/trojan. Does NOT support variants or subscription URLs). It will auto-fill the Clash config box below...',
                     clashHeader: '2. Clash YAML Config (Default Entry)',
                     copySourceConfig: 'Copy Raw Config',
+                    downloadSourceBtn: 'Download Config',
                     clashPlaceholder: 'Paste your full Clash YAML configuration or a list of proxies.\nIf it is a full config, it will preserve rules/groups and inject Socks5 listeners.\nIf it is just a list, it will auto-complete basic settings...',
                     startPortLabel: 'Socks5 Start Port',
                     clearAllBtn: 'Clear All',
@@ -689,9 +697,11 @@
                 // 统一且绝对保证执行的 UI 更新逻辑
                 if (!inputStr) {
                     copyInputBtn.style.display = 'none';
+                    downloadInputBtn.style.display = 'none';
                     clearBtn.style.display = 'none';
                 } else {
                     copyInputBtn.style.display = 'flex';
+                    downloadInputBtn.style.display = 'flex';
                     clearBtn.style.display = 'flex';
                 }
 
@@ -777,6 +787,24 @@
                 }).catch(() => {
                     showToast(getI18nStr('t_copy_fail'), 'error');
                 });
+            });
+
+            downloadInputBtn.addEventListener('click', () => {
+                const text = yamlInput.value;
+                if (!text) {
+                    showToast(getI18nStr('t_err_config_empty'), 'error');
+                    return;
+                }
+                const blob = new Blob([text], { type: 'text/yaml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'clash-source.yaml';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast(getI18nStr('t_download_start'), 'success');
             });
 
             copyV2rayBtn.addEventListener('click', () => {
