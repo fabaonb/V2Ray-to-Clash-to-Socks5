@@ -715,24 +715,6 @@ const html_content = `<!DOCTYPE html>
                         'allow-lan': true,
                         'mode': 'rule',
                         'log-level': 'info',
-                        'ipv6': false,
-                        'dns': {
-                            'enable': true,
-                            'listen': '0.0.0.0:1053',
-                            'ipv6': false,
-                            'enhanced-mode': 'fake-ip',
-                            'fake-ip-range': '198.18.0.1/16',
-                            'nameserver': ['https://dns.google/dns-query', 'https://1.1.1.1/dns-query'],
-                            'fallback': ['https://dns.google/dns-query', 'https://1.1.1.1/dns-query']
-                        },
-                        'sniffer': {
-                            'enable': true,
-                            'sniff': {
-                                'TLS': { 'ports': [443, 8443], 'override-destination': true },
-                                'HTTP': { 'ports': [80, '8080-8880'], 'override-destination': true },
-                                'QUIC': { 'ports': [443, 8443] }
-                            }
-                        },
                         'proxies': proxies,
                         'proxy-groups': [
                             {
