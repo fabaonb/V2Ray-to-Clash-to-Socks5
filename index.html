@@ -524,12 +524,14 @@
                             const proxy = {
                                 name: config.ps || 'vmess-' + Math.random().toString(36).substr(2, 5),
                                 type: 'vmess', server: config.add, port: parseInt(config.port),
-                                uuid: config.id, alterId: parseInt(config.aid || 0), cipher: config.scy || "auto"
+                                uuid: config.id, alterId: parseInt(config.aid || 0), cipher: config.scy || "auto",
+                                udp: true
                             };
                             if (config.tls === 'tls') {
                                 proxy.tls = true;
                                 if (config.sni) proxy.servername = config.sni;
                                 if (config.alpn) proxy.alpn = config.alpn.split(',');
+                                if (config.allowInsecure === 'true' || config.allowInsecure === true) proxy['skip-cert-verify'] = true;
                             }
                             if (config.net === 'ws') {
                                 proxy.network = 'ws';
@@ -539,26 +541,36 @@
                                 proxy['grpc-opts'] = { 'grpc-service-name': config.path || '' };
                             }
                             proxies.push(proxy);
-                        } else if (line.startsWith('vless://') || line.startsWith('trojan://')) {
+                        } else if (line.startsWith('vless://') || line.startsWith('trojan://') || line.startsWith('hysteria2://') || line.startsWith('hy2://')) {
                             const url = new URL(line);
-                            const type = url.protocol.replace(':', '');
+                            let type = url.protocol.replace(':', '');
+                            if (type === 'hy2') type = 'hysteria2';
+
                             const proxy = {
                                 name: decodeURIComponent(url.hash.slice(1)) || `${type}-${Math.random().toString(36).substr(2, 5)}`,
-                                type: type, server: url.hostname, port: parseInt(url.port),
+                                type: type, server: url.hostname, port: parseInt(url.port) || 443,
+                                udp: true
                             };
+
                             if (type === 'vless') {
                                 proxy.uuid = url.username;
                                 const flow = url.searchParams.get('flow');
                                 if (flow) proxy.flow = flow;
+                            } else if (type === 'hysteria2') {
+                                proxy.password = url.username;
+                                const obfs = url.searchParams.get('obfs');
+                                if (obfs) {
+                                    proxy.obfs = obfs;
+                                    proxy['obfs-password'] = url.searchParams.get('obfs-password') || url.searchParams.get('obfs-pass') || '';
+                                }
                             } else {
                                 proxy.password = decodeURIComponent(url.username);
                             }
 
                             const security = url.searchParams.get('security');
-                            if (security === 'tls' || security === 'reality') {
+                            if (security === 'tls' || security === 'reality' || type === 'hysteria2' || type === 'trojan') {
                                 proxy.tls = true;
                                 if (security === 'reality') {
-                                    proxy.reality = true; // Use meta specific flag if needed, but standard is reality-opts
                                     proxy['reality-opts'] = {
                                         'public-key': url.searchParams.get('pbk') || '',
                                         'short-id': url.searchParams.get('sid') || ''
@@ -570,6 +582,7 @@
                                 if (fp) proxy['client-fingerprint'] = fp;
                                 const alpn = url.searchParams.get('alpn');
                                 if (alpn) proxy.alpn = alpn.split(',');
+                                if (url.searchParams.get('insecure') === '1' || url.searchParams.get('allowInsecure') === '1') proxy['skip-cert-verify'] = true;
                             }
 
                             const network = url.searchParams.get('type');
@@ -611,7 +624,7 @@
                                 }
                             }
                             if (server && port) {
-                                proxies.push({ name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password });
+                                proxies.push({ name: hash || 'ss-' + Math.random().toString(36).substr(2, 5), type: 'ss', server: server, port: port, cipher: method, password: password, udp: true });
                             }
                         }
                     } catch (e) {
@@ -647,6 +660,10 @@
                             'DOMAIN-WILDCARD,*.google.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.youtube.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.github.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.googlevideo.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.gstatic.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.googleusercontent.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.ggpht.com,🚀 节点选择',
                             'DOMAIN-SUFFIX,google.com,🚀 节点选择',
                             'DOMAIN-SUFFIX,github.com,🚀 节点选择',
                             'DOMAIN-KEYWORD,google,🚀 节点选择',
