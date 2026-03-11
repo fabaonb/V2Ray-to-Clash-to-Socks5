@@ -427,7 +427,12 @@
                     t_copied_v2ray: '已复制V2Ray链接到剪贴板！',
                     t_err_result_empty: '还没有转换结果可操作',
                     t_copied_result: '已复制到剪贴板！',
-                    t_download_start: '已成功开始下载配置！'
+                    t_download_start: '已成功开始下载配置！',
+                    t_unsupported_protocol: 'Clash原生不支持此协议',
+                    t_invalid_vmess: 'VMess JSON解析失败',
+                    t_unsupported_flow: 'Clash不支持此流控/XTLS',
+                    t_unsupported_node: '当前配置或协议不受支持',
+                    t_unsupported_prefix: '🛑 Clash不支持'
                 },
                 'en': {
                     title: '<i class="fa-solid fa-network-wired"></i> V2Ray / Clash to Socks5',
@@ -455,7 +460,12 @@
                     t_copied_v2ray: 'V2Ray source link copied to clipboard!',
                     t_err_result_empty: 'No generated result available yet.',
                     t_copied_result: 'Result config copied to clipboard!',
-                    t_download_start: 'Configuration download started successfully!'
+                    t_download_start: 'Configuration download started successfully!',
+                    t_unsupported_protocol: 'Clash does not natively support this protocol',
+                    t_invalid_vmess: 'VMess JSON parsing failed',
+                    t_unsupported_flow: 'Clash does not support this flow/XTLS',
+                    t_unsupported_node: 'Current config or protocol is not supported',
+                    t_unsupported_prefix: '🛑 Unsupported by Clash'
                 }
             };
 
@@ -540,7 +550,7 @@
                             proxies.push({
                                 name: decodeURIComponent(line.split('#')[1] || protocol),
                                 type: 'unsupported',
-                                reason: 'Clash原生不支持此协议'
+                                reason: getI18nStr('t_unsupported_protocol')
                             });
                             continue;
                         }
@@ -552,7 +562,7 @@
                             try {
                                 config = JSON.parse(decodeBase64Safe(configStr));
                             } catch (e) {
-                                proxies.push({ name: 'Invalid VMess', type: 'unsupported', reason: 'VMess JSON解析失败' });
+                                proxies.push({ name: 'Invalid VMess', type: 'unsupported', reason: getI18nStr('t_invalid_vmess') });
                                 continue;
                             }
 
@@ -633,7 +643,7 @@
                                         proxies.push({
                                             name: proxy.name,
                                             type: 'unsupported',
-                                            reason: `Clash不支持此流控/XTLS: ${flow}`
+                                            reason: `${getI18nStr('t_unsupported_flow')}: ${flow}`
                                         });
                                         continue;
                                     }
@@ -886,7 +896,7 @@
                     if (hasUnsupported) {
                         let msg = "";
                         proxies.filter(p => p.type === 'unsupported').forEach(p => {
-                            msg += `# 🛑 Clash不支持 [${p.name}]: ${p.reason || '当前配置或协议不受支持'}\n`;
+                            msg += `# ${getI18nStr('t_unsupported_prefix')} [${p.name}]: ${p.reason || getI18nStr('t_unsupported_node')}\n`;
                         });
                         return msg + (yaml ? "\n" + yaml : "");
                     }
