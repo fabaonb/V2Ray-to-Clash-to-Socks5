@@ -516,7 +516,7 @@
                 const proxies = [];
                 for (let line of lines) {
                     line = line.trim();
-                    if (!line) continue;
+                    if (!line || line.startsWith('#')) continue;
                     try {
                         if (line.startsWith('vmess://')) {
                             const payload = line.slice(8);
@@ -524,54 +524,90 @@
                             const proxy = {
                                 name: config.ps || 'vmess-' + Math.random().toString(36).substr(2, 5),
                                 type: 'vmess', server: config.add, port: parseInt(config.port),
-                                uuid: config.id, alterId: parseInt(config.aid || 0), cipher: "auto"
+                                uuid: config.id, alterId: parseInt(config.aid || 0), cipher: config.scy || "auto"
                             };
-                            if (config.net === 'ws') {
-                                proxy.network = 'ws';
-                                proxy['ws-opts'] = { path: config.path || '/', headers: { Host: config.host || '' } };
-                            }
                             if (config.tls === 'tls') {
                                 proxy.tls = true;
                                 if (config.sni) proxy.servername = config.sni;
+                                if (config.alpn) proxy.alpn = config.alpn.split(',');
+                            }
+                            if (config.net === 'ws') {
+                                proxy.network = 'ws';
+                                proxy['ws-opts'] = { path: config.path || '/', headers: { Host: config.host || '' } };
+                            } else if (config.net === 'grpc') {
+                                proxy.network = 'grpc';
+                                proxy['grpc-opts'] = { 'grpc-service-name': config.path || '' };
                             }
                             proxies.push(proxy);
-                        } else if (line.startsWith('trojan://') || line.startsWith('vless://')) {
+                        } else if (line.startsWith('vless://') || line.startsWith('trojan://')) {
                             const url = new URL(line);
+                            const type = url.protocol.replace(':', '');
                             const proxy = {
-                                name: decodeURIComponent(url.hash.slice(1)) || url.protocol.replace(':', '') + '-' + Math.random().toString(36).substr(2, 5),
-                                type: url.protocol.replace(':', ''), server: url.hostname, port: parseInt(url.port),
-                                password: decodeURIComponent(url.username || url.pathname.slice(2)),
+                                name: decodeURIComponent(url.hash.slice(1)) || `${type}-${Math.random().toString(36).substr(2, 5)}`,
+                                type: type, server: url.hostname, port: parseInt(url.port),
                             };
-                            if (proxy.type === 'vless') {
-                                proxy.uuid = url.username; delete proxy.password;
-                                if (url.searchParams.get('security') === 'tls') proxy.tls = true;
-                                if (url.searchParams.get('type') === 'ws') {
-                                    proxy.network = 'ws';
-                                    proxy['ws-opts'] = { path: url.searchParams.get('path') || '/' };
-                                }
+                            if (type === 'vless') {
+                                proxy.uuid = url.username;
+                                const flow = url.searchParams.get('flow');
+                                if (flow) proxy.flow = flow;
+                            } else {
+                                proxy.password = decodeURIComponent(url.username);
                             }
-                            if (url.searchParams.get('peer') || url.searchParams.get('sni')) {
-                                proxy.sni = url.searchParams.get('peer') || url.searchParams.get('sni');
+
+                            const security = url.searchParams.get('security');
+                            if (security === 'tls' || security === 'reality') {
+                                proxy.tls = true;
+                                if (security === 'reality') {
+                                    proxy.reality = true; // Use meta specific flag if needed, but standard is reality-opts
+                                    proxy['reality-opts'] = {
+                                        'public-key': url.searchParams.get('pbk') || '',
+                                        'short-id': url.searchParams.get('sid') || ''
+                                    };
+                                }
+                                const sni = url.searchParams.get('sni') || url.searchParams.get('peer');
+                                if (sni) proxy.servername = sni;
+                                const fp = url.searchParams.get('fp');
+                                if (fp) proxy['client-fingerprint'] = fp;
+                                const alpn = url.searchParams.get('alpn');
+                                if (alpn) proxy.alpn = alpn.split(',');
+                            }
+
+                            const network = url.searchParams.get('type');
+                            if (network === 'ws') {
+                                proxy.network = 'ws';
+                                proxy['ws-opts'] = { path: url.searchParams.get('path') || '/', headers: { Host: url.searchParams.get('host') || '' } };
+                            } else if (network === 'grpc') {
+                                proxy.network = 'grpc';
+                                proxy['grpc-opts'] = { 'grpc-service-name': url.searchParams.get('serviceName') || '' };
                             }
                             proxies.push(proxy);
                         } else if (line.startsWith('ss://')) {
                             let hash = ''; let main = line.slice(5);
                             if (main.includes('#')) { const parts = main.split('#'); hash = decodeURIComponent(parts[1]); main = parts[0]; }
                             let method = '', password = '', server = '', port = '';
+
+                            // Handling SIP002 format: ss://BASE64(method:password)@server:port
                             if (main.includes('@')) {
                                 const parts = main.split('@');
-                                const credentials = decodeBase64Safe(parts[0]).split(':');
-                                method = credentials[0]; password = credentials[1];
-                                const serverParts = parts[1].split(':');
-                                server = serverParts[0]; port = parseInt(serverParts[1]);
+                                const credentials = decodeBase64Safe(parts[0]);
+                                if (credentials.includes(':')) {
+                                    const cParts = credentials.split(':');
+                                    method = cParts[0]; password = cParts[1];
+                                }
+                                const serverPart = parts[1];
+                                if (serverPart.includes(':')) {
+                                    const sParts = serverPart.split(':');
+                                    server = sParts[0]; port = parseInt(sParts[1]);
+                                }
                             } else {
                                 const decoded = decodeBase64Safe(main);
+                                // Handles legacy format or others
                                 const parts = decoded.split('@');
                                 if (parts.length === 2) {
-                                    const credentials = parts[0].split(':');
-                                    method = credentials[0]; password = credentials[1];
-                                    const serverParts = parts[1].split(':');
-                                    server = serverParts[0]; port = parseInt(serverParts[1]);
+                                    const cParts = parts[0].split(':');
+                                    method = cParts[0]; password = cParts[1];
+                                    const sParts = parts[1].split(':');
+                                    server = sParts[0]; port = parseInt(sParts[1]);
                                 }
                             }
                             if (server && port) {
@@ -608,13 +644,12 @@
                             }
                         ],
                         'rules': [
-                            'DOMAIN-SUFFIX,google.com,🚀 节点选择',
-                            'DOMAIN-KEYWORD,google,🚀 节点选择',
-                            'DOMAIN-SUFFIX,github.com,🚀 节点选择',
-                            'DOMAIN-SUFFIX,youtube.com,🚀 节点选择',
-                            'DOMAIN-SUFFIX,facebook.com,🚀 节点选择',
-                            'DOMAIN-SUFFIX,twitter.com,🚀 节点选择',
                             'DOMAIN-WILDCARD,*.google.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.youtube.com,🚀 节点选择',
+                            'DOMAIN-WILDCARD,*.github.com,🚀 节点选择',
+                            'DOMAIN-SUFFIX,google.com,🚀 节点选择',
+                            'DOMAIN-SUFFIX,github.com,🚀 节点选择',
+                            'DOMAIN-KEYWORD,google,🚀 节点选择',
                             'GEOIP,CN,DIRECT',
                             'MATCH,🚀 节点选择'
                         ]
