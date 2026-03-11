@@ -1,0 +1,11 @@
+name = "v2ray-clash-to-socks5"
+compatibility_date = "2024-03-11"
+main = "worker.js" # This assumes they deploy via worker.js, or use Assets
+
+# === Cloudflare Pages 部署配置 ===
+# 如果使用 Cloudflare Pages, 此文件夹及 index.html 将自动作为静态资源发布
+# pages_build_output_dir = "."
+
+# === Cloudflare Workers (Assets 方式) 部署配置 ===
+# [assets]
+# directory = "./"
