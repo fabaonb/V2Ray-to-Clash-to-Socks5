@@ -588,7 +588,12 @@
 
                 if (inputStr) {
                     try {
-                        let doc = jsyaml.load(inputStr);
+                        // 预处理：删除所有 YAML 注释
+                        // 正则逻辑：匹配行首或空格后的 # 及其后续所有字符，直到行尾
+                        // 注意：这会过滤掉大部分注释，且 js-yaml 本身加载后 dump 也不带注释
+                        const cleanInput = inputStr.replace(/(^|[ \t])#.*$/gm, '$1');
+
+                        let doc = jsyaml.load(cleanInput);
 
                         // 如果输入是数组，则认为它只是节点列表，包装成对象
                         if (Array.isArray(doc)) {
