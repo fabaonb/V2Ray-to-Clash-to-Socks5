@@ -6,19 +6,10 @@
 <h2 align="center">V2Ray / Clash 转 Socks5</h2>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/HTML5-E34F26?style=flat-square&logo=html5&logoColor=white" alt="HTML5">
-  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
-  <img src="https://img.shields.io/badge/Cloudflare-F38020?style=flat-square&logo=cloudflare&logoColor=white" alt="Cloudflare">
-  <img src="https://img.shields.io/badge/Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel">
-</p>
-
-<h4 align="center">技术栈</h4>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/HTML5-E34F26?style=flat-square&logo=html5&logoColor=white" alt="HTML5">
-  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" alt="JavaScript">
-  <img src="https://img.shields.io/badge/Cloudflare-F38020?style=flat-square&logo=cloudflare&logoColor=white" alt="Cloudflare">
-  <img src="https://img.shields.io/badge/Vercel-000000?style=flat-square&logo=vercel&logoColor=white" alt="Vercel">
+  <img src="https://img.shields.io/github/stars/fabaonb/V2Ray-to-Clash-to-Socks5?style=flat-square" alt="Stars">
+  <img src="https://img.shields.io/github/forks/fabaonb/V2Ray-to-Clash-to-Socks5?style=flat-square" alt="Forks">
+  <img src="https://img.shields.io/github/license/fabaonb/V2Ray-to-Clash-to-Socks5?style=flat-square" alt="License">
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=fabaonb.V2Ray-to-Clash-to-Socks5" alt="Visitors">
 </p>
 
 ---
